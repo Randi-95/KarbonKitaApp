@@ -57,11 +57,11 @@ Proyek ini menggunakan **Laravel Sanctum** sebagai standar autentikasi API. Sanc
 * **Endpoint**: `GET /api/leaderboard?scope=rt&timeframe=weekly`
 * **Data**: Ranking list (User, Rank, Points, RT/RW context).
 
-### B. Misi & Aktivitas (GET & POST)
+### B. Misi Aktivitas (Activity Missions)
 
-#### 1. Get Mission Saga Path (GET)
-* **Endpoint**: `GET /api/missions/saga`
-* **Data**: Status babak misi (Locked/Active/Completed).
+#### 1. Get Active Missions (GET)
+* **Endpoint**: `GET /api/missions/active`
+* **Data**: Daftar misi mobility & waste yang tersedia untuk dikerjakan.
 
 #### 2. Validasi Foto Sampah via AI Gemini (POST)
 * **Endpoint**: `POST /api/missions/verify-waste`
@@ -73,10 +73,23 @@ Proyek ini menggunakan **Laravel Sanctum** sebagai standar autentikasi API. Sanc
 * **Endpoint**: `POST /api/missions/mobility-sync`
 * **Body**: `activity_type` (cycling/walking), `distance_km`, `duration_seconds`, `gps_coordinates_path` (Array JSON).
 
-#### 4. Get Carbon & Activity Stats (GET)
+### C. Saga Map (Quiz Missions)
+
+#### 1. Get Quiz List (GET)
+* **Endpoint**: `GET /api/saga/quizzes`
+* **Data**: Daftar kuis harian untuk menjaga streak.
+
+#### 2. Submit Quiz Answer (POST)
+* **Endpoint**: `POST /api/saga/answer`
+* **Body**: `{ "quiz_id": 1, "answer": "A" }`
+* **Logic**: Validasi jawaban -> Berikan XP reward -> Update streak.
+
+### D. Profil & Statistik
+
+#### 1. Get Carbon & Activity Stats (GET)
 * **Endpoint**: `GET /api/user/carbon-stats`
 * **Data**: Total CO2 saved, KM traveled, KG waste sorted (Untuk tampilan Profil).
-
+    
 ### C. Marketplace & Rewards (GET & POST)
 
 #### 1. Get Marketplace Vouchers (GET)

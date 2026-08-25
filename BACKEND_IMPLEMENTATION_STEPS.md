@@ -41,16 +41,31 @@ Membuat user bisa mendaftar (Register) dan masuk (Login).
 
 ---
 
-## FASE 3: MISI, SAGA & DETEKSI SAMPAH (AI GEMINI)
-Implementasi progres visual (Saga Map) dan deteksi AI.
+## FASE 3: MISI AKTIVITAS & SAGA MAP (QUIZ)
+Implementasi misi berbasis aktivitas fisik dan kuis harian.
 
 ### Logika Internal:
-1. **Saga Progress (`GET /api/missions/saga`)**: 
-   - Query tabel `missions` dan `user_missions` untuk menampilkan progres `saga_level` tiap user. Tandai sebagai `completed`, `active`, atau `locked`.
+
+#### A. Misi Aktivitas (Activity Missions)
+1. **Get Active Missions (`GET /api/missions/active`)**:
+   - Query tabel `missions` dengan `category IN ('mobility', 'waste')` dan `is_active = true`.
+   - Return daftar misi yang tersedia untuk dikerjakan.
 2. **AI Verification (`POST /api/missions/verify-waste`)**:
    - `GeminiService` mengirim gambar ke API Vision.
    - **Anti-Fraud**: Cek EXIF metadata (koordinat & waktu). Jika lokasi foto jauh dari koordinat user saat ini, batalkan.
    - Berikan poin jika `confidence_score` > 85%.
+3. **Mobility Sync (`POST /api/missions/mobility-sync`)**:
+   - Terima data GPS, hitung jarak dan estimasi CO2 saved.
+   - Berikan XP reward berdasarkan jarak tempuh.
+
+#### B. Saga Map (Quiz Missions)
+1. **Get Quizzes (`GET /api/saga/quizzes`)**:
+   - Query tabel `missions` dengan `category = 'quiz'`.
+   - Tampilkan status: belum dikerjakan / sudah selesai hari ini.
+2. **Submit Answer (`POST /api/saga/answer`)**:
+   - Validasi jawaban terhadap `quizzes.correct_answer`.
+   - Berikan XP reward jika benar.
+   - Update streak user.
 
 ---
 
