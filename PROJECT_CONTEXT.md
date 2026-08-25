@@ -18,11 +18,11 @@ Dokumen ini berfungsi sebagai **Context Prompt** utama. Ketika Anda memberikan f
 ---
 
 ## 2. Struktur Dokumen Teknis (Directory Map)
-Seluruh dokumen pendukung tersimpan di root folder proyek `D:\KarbonKitaApp\`:
-1. **Konstruksi Data**: `D:\KarbonKitaApp\Database_Schema_KarbonKita.md` (Spesifikasi field, tipe data, dan relasi).
-2. **Visualisasi ERD (Markdown)**: `D:\KarbonKitaApp\ERD_KarbonKita.md` (Kode Mermaid JS untuk Github/Notion).
-3. **Visualisasi ERD (Interactive)**: `D:\KarbonKitaApp\ERD_KarbonKita_Interactive.html` (Buka dengan browser untuk visualisasi interaktif).
-4. **API Contract**: `D:\KarbonKitaApp\API_Contract_KarbonKita.md` (Payload request/response, HTTP status codes, middleware, security rules).
+Seluruh dokumen pendukung tersimpan di root folder proyek (relative dari root):
+1. **Konstruksi Data**: `./Database_Schema_KarbonKita.md` (Spesifikasi field, tipe data, dan relasi).
+2. **Visualisasi ERD (Markdown)**: `./ERD_KarbonKita.md` (Kode Mermaid JS untuk Github/Notion).
+3. **Visualisasi ERD (Interactive)**: `./ERD_KarbonKita_Interactive.html` (Buka dengan browser untuk visualisasi interaktif).
+4. **API Contract**: `./API_Contract_KarbonKita.md` (Payload request/response, HTTP status codes, middleware, security rules).
 
 ---
 
