@@ -1,0 +1,496 @@
+{
+  "info": {
+    "name": "KarbonKita API",
+    "_postman_id": "karbonkita-api-collection",
+    "description": "API Collection for KarbonKita - Aksi kecil, dampak besar\n\n## Authentication\nAll protected endpoints require Bearer Token in Authorization header.\n\n## Base URL\nhttp://localhost:8000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "auth_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Moch. Rafi Andi\",\n  \"phone\": \"+628123456789\",\n  \"email\": \"rafi@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"password_confirmation\": \"SecurePassword123!\",\n  \"role\": \"warga\",\n  \"city\": \"Surabaya\",\n  \"district\": \"Gubeng\",\n  \"sub_district\": \"Mojo\",\n  \"rt\": \"005\",\n  \"rw\": \"02\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register new warga account"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.data.token) {",
+                  "    pm.collectionVariables.set('auth_token', jsonData.data.token);",
+                  "    console.log('Token saved: ' + jsonData.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_or_email\": \"rafi@example.com\",\n  \"password\": \"SecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login with email or phone. Token will be saved to collection variable 'auth_token'"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout and revoke current token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏠 Dashboard (Beranda)",
+      "item": [
+        {
+          "name": "Get Dashboard Data",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Response has user data', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('user');",
+                  "    pm.expect(jsonData.data.user).to.have.property('name');",
+                  "    pm.expect(jsonData.data.user).to.have.property('eco_points');",
+                  "    pm.expect(jsonData.data.user).to.have.property('xp');",
+                  "    pm.expect(jsonData.data.user).to.have.property('level');",
+                  "});",
+                  "",
+                  "pm.test('Response has daily_missions', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('daily_missions');",
+                  "    pm.expect(jsonData.data.daily_missions).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Response has leaderboard_preview', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('leaderboard_preview');",
+                  "    pm.expect(jsonData.data.leaderboard_preview).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "dashboard"]
+            },
+            "description": "Get user dashboard data including profile, daily missions, and leaderboard preview"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏆 Leaderboard",
+      "item": [
+        {
+          "name": "Get Leaderboard - RT Weekly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Response has rankings array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('rankings');",
+                  "    pm.expect(jsonData.data.rankings).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Response has scope and timeframe', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('scope');",
+                  "    pm.expect(jsonData.data).to.have.property('timeframe');",
+                  "    pm.expect(jsonData.data.scope).to.equal('rt');",
+                  "    pm.expect(jsonData.data.timeframe).to.equal('weekly');",
+                  "});",
+                  "",
+                  "pm.test('Response has current_user', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('current_user');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?scope=rt&timeframe=weekly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "rt",
+                  "description": "Scope: rt or rw"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "weekly",
+                  "description": "Timeframe: weekly or monthly"
+                }
+              ]
+            },
+            "description": "Get leaderboard filtered by RT for current week"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Leaderboard - RT Monthly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is monthly', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.timeframe).to.equal('monthly');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?scope=rt&timeframe=monthly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "rt"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "monthly"
+                }
+              ]
+            },
+            "description": "Get leaderboard filtered by RT for current month"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Leaderboard - RW Weekly",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?scope=rw&timeframe=weekly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard"],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "rw"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "weekly"
+                }
+              ]
+            },
+            "description": "Get leaderboard filtered by RW for current week"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🛒 Marketplace & Rewards",
+      "item": [
+        {
+          "name": "Get Marketplace Vouchers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Response has vouchers array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Voucher has required fields', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data.length > 0) {",
+                  "        var voucher = jsonData.data[0];",
+                  "        pm.expect(voucher).to.have.property('id');",
+                  "        pm.expect(voucher).to.have.property('title');",
+                  "        pm.expect(voucher).to.have.property('points_cost');",
+                  "        pm.expect(voucher).to.have.property('rupiah_value');",
+                  "        pm.expect(voucher).to.have.property('stock');",
+                  "        pm.expect(voucher).to.have.property('mitra');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/vouchers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vouchers"]
+            },
+            "description": "Get list of available vouchers from marketplace"
+          },
+          "response": []
+        },
+        {
+          "name": "Claim Voucher",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Response has claim data', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('claim_id');",
+                  "    pm.expect(jsonData.data).to.have.property('qr_token');",
+                  "    pm.expect(jsonData.data).to.have.property('voucher_title');",
+                  "    pm.expect(jsonData.data).to.have.property('points_cost');",
+                  "    pm.expect(jsonData.data).to.have.property('remaining_points');",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    pm.collectionVariables.set('claim_id', jsonData.data.claim_id);",
+                  "    pm.collectionVariables.set('qr_token', jsonData.data.qr_token);",
+                  "    console.log('Claim ID saved: ' + jsonData.data.claim_id);",
+                  "    console.log('QR Token saved: ' + jsonData.data.qr_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voucher_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/claim",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vouchers", "claim"]
+            },
+            "description": "Claim a voucher using eco points. Make sure user has enough points. Update voucher_id in body before sending."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Vouchers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Response has voucher categories', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('active');",
+                  "    pm.expect(jsonData.data).to.have.property('used');",
+                  "    pm.expect(jsonData.data).to.have.property('expired');",
+                  "    pm.expect(jsonData.data.active).to.be.an('array');",
+                  "    pm.expect(jsonData.data.used).to.be.an('array');",
+                  "    pm.expect(jsonData.data.expired).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Each voucher has QR token', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data.active.length > 0) {",
+                  "        var voucher = jsonData.data.active[0];",
+                  "        pm.expect(voucher).to.have.property('qr_token');",
+                  "        pm.expect(voucher).to.have.property('voucher');",
+                  "        pm.expect(voucher).to.have.property('mitra');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user/my-vouchers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "my-vouchers"]
+            },
+            "description": "Get user's voucher inventory grouped by status (active, used, expired)"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

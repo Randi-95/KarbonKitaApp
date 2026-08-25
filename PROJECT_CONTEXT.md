@@ -35,10 +35,15 @@ Seluruh dokumen pendukung tersimpan di root folder proyek (relative dari root):
 2. **Dashboard Utama (Beranda)**:
    - Menampilkan Poin Aktif (*Eco Points*), Level Pengguna (*Earth Warrior*), XP Progress Bar, dan status *Streak* harian.
    - Papan peringkat (*Leaderboard*) terintegrasi berdasarkan perolehan poin per individu maupun per RT/RW (menghindari dashboard admin terpisah).
-3. **Halaman Misi & Deteksi AI (Misi)**:
-   - Peta Misi Saga (*Saga Map*) berisi rangkaian tahapan belajar dan tantangan ramah lingkungan.
+3. **Halaman Misi Aktivitas (Activity Missions)**:
+   - Misi berbasis aktivitas fisik: **Mobility** (bersepeda/jalan kaki) dan **Waste** (pemilahan sampah).
    - Kamera scanner untuk memotret bukti sampah terpilah dengan overlay instruksi dan status **"Sistem Anti-Fraud Aktif"**.
    - Tracker GPS real-time untuk merekam rute, jarak km, dan estimasi CO2 yang dihemat dari aktivitas mobilitas aktif.
+
+4. **Saga Map (Quiz Missions)**:
+   - Kuis harian untuk menjaga streak tanpa harus melakukan aktivitas fisik.
+   - Alternatif ketika pengguna tidak ingin melakukan misi aktivitas.
+   - Menambah XP meski tidak ada aktivitas fisik.
 
 ### B. Tampilan Mitra UMKM (Merchant App)
 1. **Dashboard Toko**:
