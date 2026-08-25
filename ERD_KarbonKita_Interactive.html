@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KarbonKita - Entity Relationship Diagram (ERD)</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #0b0f19;
+      color: #f8fafc;
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 1.8rem;
+      color: #10b981;
+      margin-bottom: 0.5rem;
+      border-bottom: 2px solid #1e293b;
+      padding-bottom: 1rem;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    .mermaid-card {
+      background: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      overflow-x: auto;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+  </style>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        background: '#111827',
+        primaryColor: '#10b981',
+        primaryTextColor: '#fff',
+        lineColor: '#64748b',
+        secondaryColor: '#3b82f6',
+        tertiaryColor: '#1f2937'
+      }
+    });
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>Entity Relationship Diagram (ERD) - KarbonKita</h1>
+    <p>Diagram di bawah ini secara dinamis dirender dengan Mermaid.js. Hubungan relasional antar-tabel dan tipe data dapat dianalisis dengan jelas.</p>
+    
+    <div class="mermaid-card">
+      <pre class="mermaid">
+erDiagram
+
+    USERS {
+        BIGINT id PK
+        VARCHAR name
+        VARCHAR email "UNIQUE"
+        VARCHAR phone "UNIQUE"
+        VARCHAR password
+        ENUM role "'warga', 'mitra', 'super_admin'"
+        TIMESTAMP created_at
+    }
+
+    WARGA_PROFILES {
+        BIGINT id PK
+        BIGINT user_id FK
+        VARCHAR city
+        VARCHAR district
+        VARCHAR sub_district
+        VARCHAR rt
+        VARCHAR rw
+        INT level
+        INT xp
+        INT eco_points
+        INT streak_count
+        DECIMAL total_distance_km
+        DECIMAL total_waste_kg
+        DECIMAL total_carbon_saved_kg
+    }
+
+    MITRA_PROFILES {
+        BIGINT id PK
+        BIGINT user_id FK
+        VARCHAR store_name
+        VARCHAR category
+        TEXT address
+        VARCHAR bank_name
+        VARCHAR bank_account_number
+        VARCHAR xendit_external_id "UNIQUE"
+        ENUM verification_status
+        BOOLEAN is_open
+        DECIMAL balance_saldo
+    }
+
+    MISSIONS {
+        BIGINT id PK
+        VARCHAR title
+        ENUM category "'mobility', 'waste', 'quiz'"
+        INT reward_points
+        INT reward_xp
+        INT saga_level
+        BOOLEAN is_active
+    }
+
+    USER_MISSIONS {
+        BIGINT id PK
+        BIGINT user_id FK
+        BIGINT mission_id FK
+        VARCHAR proof_image_url
+        JSON ai_gemini_response
+        DECIMAL confidence_score
+        ENUM status "'pending', 'verified', 'rejected'"
+        BOOLEAN anti_fraud_flagged
+        TIMESTAMP verified_at
+    }
+
+    MOBILITY_LOGS {
+        BIGINT id PK
+        BIGINT user_id FK
+        ENUM activity_type
+        DECIMAL distance_km
+        INT duration_seconds
+        DECIMAL carbon_saved_kg
+        INT points_earned
+        JSON gps_coordinates_path
+    }
+    
+    QUIZ_QUESTIONS {
+        BIGINT id PK
+        BIGINT mission_id FK
+        TEXT question_text
+        VARCHAR option_a
+        VARCHAR option_b
+        VARCHAR option_c
+        VARCHAR option_d
+        ENUM correct_option
+        TEXT explanation
+    }
+
+    VOUCHERS {
+        BIGINT id PK
+        BIGINT mitra_profile_id FK
+        VARCHAR title
+        DECIMAL discount_value_idr
+        INT points_price
+        INT stock
+        DATE expired_at
+        BOOLEAN is_active
+    }
+
+    VOUCHER_CLAIMS {
+        BIGINT id PK
+        BIGINT user_id FK
+        BIGINT voucher_id FK
+        VARCHAR unique_code "UNIQUE"
+        ENUM status "'unused', 'used', 'expired'"
+        TIMESTAMP claimed_at
+        TIMESTAMP used_at
+    }
+
+    POINT_TRANSACTIONS {
+        BIGINT id PK
+        BIGINT user_id FK
+        ENUM type "'credit', 'debit'"
+        INT amount
+        VARCHAR description
+        BIGINT reference_id
+        VARCHAR reference_type
+    }
+
+    DISBURSEMENTS {
+        BIGINT id PK
+        BIGINT mitra_profile_id FK
+        BIGINT voucher_claim_id FK
+        DECIMAL amount_idr
+        VARCHAR xendit_disbursement_id "UNIQUE"
+        ENUM status "'pending', 'completed', 'failed'"
+        JSON response_log
+        TIMESTAMP processed_at
+    }
+
+    USERS ||--o| WARGA_PROFILES : "has profile"
+    USERS ||--o| MITRA_PROFILES : "has profile"
+    USERS ||--o{ USER_MISSIONS : "performs"
+    MISSIONS ||--o{ USER_MISSIONS : "attempted in"
+    USERS ||--o{ MOBILITY_LOGS : "tracks"
+    MISSIONS ||--o{ QUIZ_QUESTIONS : "contains"
+    MITRA_PROFILES ||--o{ VOUCHERS : "creates"
+    VOUCHERS ||--o{ VOUCHER_CLAIMS : "claimed as"
+    USERS ||--o{ VOUCHER_CLAIMS : "claims"
+    USERS ||--o{ POINT_TRANSACTIONS : "owns balance log"
+    MITRA_PROFILES ||--o{ DISBURSEMENTS : "receives"
+    VOUCHER_CLAIMS ||--o| DISBURSEMENTS : "triggers payout"
+      </pre>
+    </div>
+  </div>
+</body>
+</html>
