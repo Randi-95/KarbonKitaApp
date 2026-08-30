@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\LoginRequest;
+use App\Models\MitraProfile;
 use App\Models\User;
 use App\Models\WargaProfile;
 use Illuminate\Http\JsonResponse;
@@ -31,12 +32,27 @@ class AuthController extends Controller
                 'rw' => $validated['rw'],
             ]);
 
-            $user->wargaProfile()->create([
-                'level' => 'Earth Newbie',
-                'xp' => 0,
-                'eco_points' => 0,
-                'streak_days' => 0,
-            ]);
+            if ($validated['role'] === 'mitra') {
+                MitraProfile::create([
+                    'user_id' => $user->id,
+                    'nama_usaha' => $validated['nama_usaha'] ?? $validated['name'] . ' Usaha',
+                    'jenis_usaha' => $validated['jenis_usaha'] ?? 'UMKM',
+                    'alamat_usaha' => $validated['alamat_usaha'] ?? $validated['kota'] . ', ' . $validated['district'],
+                    'nama_bank' => $validated['nama_bank'] ?? null,
+                    'nomor_rekening' => $validated['nomor_rekening'] ?? null,
+                    'nama_pemilik_rekening' => $validated['nama_pemilik_rekening'] ?? $validated['name'],
+                    'status_verifikasi' => 'pending',
+                    'is_active' => false,
+                    'balance' => 0,
+                ]);
+            } else {
+                $user->wargaProfile()->create([
+                    'level' => 'Earth Newbie',
+                    'xp' => 0,
+                    'eco_points' => 0,
+                    'streak_days' => 0,
+                ]);
+            }
 
             return $user;
         });

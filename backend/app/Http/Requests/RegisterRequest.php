@@ -20,12 +20,19 @@ class RegisterRequest extends FormRequest
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['required', 'string', 'regex:/^\+[0-9]{10,15}$/', 'unique:users,phone'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', 'string', 'in:warga'],
+            'role' => ['required', 'string', 'in:warga,mitra'],
             'city' => ['required', 'string', 'max:255'],
             'district' => ['required', 'string', 'max:255'],
             'sub_district' => ['required', 'string', 'max:255'],
             'rt' => ['required', 'string', 'max:10'],
             'rw' => ['required', 'string', 'max:10'],
+            // Optional mitra onboarding fields (nullable for warga)
+            'nama_usaha' => ['nullable', 'string', 'max:255'],
+            'jenis_usaha' => ['nullable', 'string', 'max:255'],
+            'alamat_usaha' => ['nullable', 'string', 'max:500'],
+            'nama_bank' => ['nullable', 'string', 'max:255'],
+            'nomor_rekening' => ['nullable', 'string', 'max:100'],
+            'nama_pemilik_rekening' => ['nullable', 'string', 'max:255'],
         ];
     }
 

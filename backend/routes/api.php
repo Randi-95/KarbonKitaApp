@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CarbonStatsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LeaderboardController;
+use App\Http\Controllers\SagaController;
 use App\Http\Controllers\VoucherController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,6 +31,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // Leaderboard
     Route::get('/leaderboard', [LeaderboardController::class, 'index'])
         ->name('leaderboard.index');
+
+    // Saga Map (Quiz) — throttle brute-force on answer
+    Route::get('/saga/quizzes', [SagaController::class, 'index'])
+        ->name('saga.quizzes');
+    Route::post('/saga/answer', [SagaController::class, 'answer'])
+        ->middleware('throttle:10,1')
+        ->name('saga.answer');
+
+    // Carbon Stats
+    Route::get('/user/carbon-stats', [CarbonStatsController::class, 'index'])
+        ->name('user.carbon-stats');
 
     // Marketplace & Vouchers
     Route::get('/vouchers', [VoucherController::class, 'index'])

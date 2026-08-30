@@ -17,14 +17,15 @@ class UserMissionSeeder extends Seeder
             return;
         }
 
+        // Note: quiz missions intentionally NOT on days_ago 0 so seeded users can still test daily quiz today (WIB)
         $rafMissions = [
             ['title' => 'Pejuang Pedal 2Km', 'days_ago' => 6],
             ['title' => 'Pahlawan Plastik Terpilah', 'days_ago' => 5],
             ['title' => 'Kuis Hijau Harian', 'days_ago' => 4],
             ['title' => 'Sepeda Pagi Hari', 'days_ago' => 3],
             ['title' => 'Pilah Sampah Elektronik', 'days_ago' => 2],
-            ['title' => 'Jalan Kaki 3Km', 'days_ago' => 1],
-            ['title' => 'Petualangan Kuis Hijau', 'days_ago' => 0],
+            ['title' => 'Kuis Hijau Harian', 'days_ago' => 1],
+            ['title' => 'Jalan Kaki 3Km', 'days_ago' => 0],
         ];
 
         $alyaMissions = [
@@ -34,8 +35,8 @@ class UserMissionSeeder extends Seeder
             ['title' => 'Donasi Pohon Mangrove', 'days_ago' => 4],
             ['title' => 'Kuis Hijau Harian', 'days_ago' => 3],
             ['title' => 'Pilah Sampah Elektronik', 'days_ago' => 2],
-            ['title' => 'Jalan Kaki 3Km', 'days_ago' => 1],
-            ['title' => 'Petualangan Kuis Hijau', 'days_ago' => 0],
+            ['title' => 'Petualangan Kuis Hijau', 'days_ago' => 1],
+            ['title' => 'Jalan Kaki 3Km', 'days_ago' => 0],
         ];
 
         $rezaMissions = [
@@ -44,7 +45,7 @@ class UserMissionSeeder extends Seeder
             ['title' => 'Sepeda Pagi Hari', 'days_ago' => 3],
             ['title' => 'Kuis Hijau Harian', 'days_ago' => 2],
             ['title' => 'Donasi Pohon Mangrove', 'days_ago' => 1],
-            ['title' => 'Petualangan Kuis Hijau', 'days_ago' => 0],
+            ['title' => 'Jalan Kaki 3Km', 'days_ago' => 0],
         ];
 
         $this->createUserMissions('rafi@example.com', $rafMissions, $missions);
