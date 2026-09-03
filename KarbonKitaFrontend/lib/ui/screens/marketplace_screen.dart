@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dompet_voucher_screen.dart';
 
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
@@ -105,7 +106,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ),
           const SizedBox(width: 12),
           ElevatedButton.icon(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DompetVoucherScreen()),
+              );
+            },
             icon: const Icon(Icons.account_balance_wallet, size: 18),
             label: const Text('Dompet Voucher', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(

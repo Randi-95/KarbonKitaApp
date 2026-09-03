@@ -1,8 +1,8 @@
 # AGENTS.md
 
-## Quick Commands
-- `flutter analyze` — lint check (required before commits)
-- `flutter format lib/` — format code (required before commits)
+## Quick Commands (run with workdir `KarbonKitaFrontend/`)
+- `flutter analyze` — lint check (required before commits); single file: `flutter analyze lib/ui/screens/<file>.dart`
+- `dart format <path>` — formatter (required before commits). NOTE: `flutter format` does not exist in this toolchain
 - `flutter test` — run tests
 - `flutter run` — local dev server
 
@@ -23,7 +23,7 @@
 ## Current State (Early Stage)
 - Screens have UI code but no BLoC wiring — business logic is not yet implemented
 - `bloc/`, `models/`, `services/` directories are scaffolded but empty
-- App flow: `main.dart` → `LoginScreen` → `HomeScreen` (5-tab bottom nav)
+- App flow: `main.dart` → `LoginScreen` → `HomeScreen` (5-tab bottom nav); `MarketplaceScreen` → `DompetVoucherScreen` (ticket cards + QR redeem bottom sheet)
 
 ## Conventions
 - File names: snake_case
@@ -31,3 +31,5 @@
 - Variables/functions: camelCase
 - Extract widgets to `ui/widgets/` when `build()` exceeds ~100 lines
 - Assets in `assets/images/` — code uses `errorBuilder` fallbacks for missing images
+- New code: use `color.withValues(alpha: x)` — `withOpacity` is deprecated (old files still use it; don't mass-migrate)
+- Never fix card/ticket height with a hardcoded `height:` — size cards from content (`Stack` + `Positioned.fill`, `mainAxisSize.min`) or long text overflows on small screens

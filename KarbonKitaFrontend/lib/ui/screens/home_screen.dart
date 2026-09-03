@@ -3,6 +3,7 @@ import 'package:animated_bottom_navigation_bar/animated_bottom_navigation_bar.da
 import 'misi_screen.dart';
 import 'marketplace_screen.dart';
 import 'leaderboard_screen.dart';
+import '../widgets/draggable_quiz_fab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -13,6 +14,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  bool _showQuizFab = true;
 
   void _onItemTapped(int index) {
     setState(() {
@@ -24,7 +26,23 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FA),
-      body: _buildBody(),
+      body: Stack(
+        children: [
+          _buildBody(),
+          if (_showQuizFab)
+            DraggableQuizFab(
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => _QuizModalSheet(),
+                );
+              },
+              onClose: () => setState(() => _showQuizFab = false),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _onItemTapped(1),
         backgroundColor: const Color(0xFF43A047),
@@ -113,34 +131,22 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Colors.white,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 5,
-                ),
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5),
               ],
             ),
             child: IconButton(
-              icon: const Icon(
-                Icons.notifications_none,
-                color: Colors.black87,
-              ),
+              icon: const Icon(Icons.notifications_none, color: Colors.black87),
               onPressed: () {},
             ),
           ),
           const SizedBox(width: 10),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 5,
-                ),
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5),
               ],
             ),
             child: const Row(
@@ -148,10 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.card_giftcard, color: Colors.green, size: 20),
                 SizedBox(width: 5),
-                Text(
-                  'Event',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                Text('Event', style: TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -203,9 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: const CircleAvatar(
                       backgroundColor: Color(0xFFF3E5F5),
-                      backgroundImage: AssetImage(
-                        'assets/images/avatar.png',
-                      ),
+                      backgroundImage: AssetImage('assets/images/avatar.png'),
                       child: Icon(Icons.person, size: 50, color: Colors.grey),
                     ),
                   ),
@@ -230,7 +231,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 20,
                           height: 20,
                           errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.eco, color: Colors.green, size: 20),
+                              const Icon(
+                                Icons.eco,
+                                color: Colors.green,
+                                size: 20,
+                              ),
                         ),
                         const SizedBox(width: 6),
                         Column(
@@ -635,7 +640,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _buildAksiButton(Icons.calculate, 'Kalkulator Emisi')),
+              Expanded(
+                child: _buildAksiButton(Icons.calculate, 'Kalkulator Emisi'),
+              ),
               const SizedBox(width: 10),
               Expanded(child: _buildAksiButton(Icons.quiz, 'Kuis Harian')),
               const SizedBox(width: 10),
@@ -940,6 +947,93 @@ class _HomeScreenState extends State<HomeScreen> {
       activeColor: const Color(0xFF43A047),
       inactiveColor: Colors.grey,
       elevation: 8,
+    );
+  }
+}
+
+class _QuizModalSheet extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 80),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.quiz, color: Color(0xFF43A047), size: 40),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Kuis Harian Siap!',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Jawab 5 pertanyaan dan dapatkan eco points!',
+                        style: TextStyle(fontSize: 13, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF43A047),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Mulai Kuis',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 }
