@@ -29,6 +29,14 @@
     {
       "key": "qr_token",
       "value": ""
+    },
+    {
+      "key": "waste_mission_id",
+      "value": ""
+    },
+    {
+      "key": "mobility_mission_id",
+      "value": ""
     }
   ],
   "item": [
@@ -779,6 +787,498 @@
             },
             "description": "No token -> 401"
           },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Missions",
+      "item": [
+        {
+          "name": "Get Active Missions - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Only mobility/waste', function(){ var d=pm.response.json().data; pm.expect(d).to.be.an('array'); d.forEach(function(m){ pm.expect(['mobility','waste']).to.include(m.category); }); });",
+                  "var d=pm.response.json().data; var w=d.find(function(m){return m.category==='waste';}); var mo=d.find(function(m){return m.category==='mobility';}); if(w) pm.collectionVariables.set('waste_mission_id', w.id); if(mo) pm.collectionVariables.set('mobility_mission_id', mo.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/missions/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "active"
+              ]
+            },
+            "description": "List active mobility & waste missions (quiz excluded). Saves waste_mission_id + mobility_mission_id."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Missions - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/missions/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "active"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Success (Mock AI)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "mission_id",
+                  "value": "{{waste_mission_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "ATTACH a jpeg/png file to the 'image' key first (Body > form-data > select file). Mock AI (GEMINI_MOCK=true) returns 201 verified + XP/points. Re-run with a DIFFERENT photo or expect 409 duplicate."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });",
+                  "pm.test('Verified with rewards', function(){ var d=pm.response.json().data; pm.expect(d.status).to.eql('verified'); pm.expect(d.xp_earned).to.be.above(0); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Duplicate (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "mission_id",
+                  "value": "{{waste_mission_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "Re-send the SAME photo as the Success request -> 409 anti_fraud_flagged, no extra points."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', function(){ pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Validation Fail (Missing Image)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "mission_id",
+                  "value": "{{waste_mission_id}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "No image key -> 422 errors.image"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Errors has image', function(){ pm.expect(pm.response.json().errors).to.have.property('image'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Validation Fail (Wrong Mission)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mission_id\": 9999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "Non-existent mission (or quiz/mobility id) -> 422 errors.mission_id. Note: needs multipart without file, sent as JSON to show the mission check."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Fail (Unauthorized)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Success (Cycling)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mission_id\": {{mobility_mission_id}},\n  \"activity_type\": \"cycling\",\n  \"distance_km\": 2,\n  \"duration_seconds\": 1200,\n  \"gps_coordinates_path\": [\n    {\"lat\": -7.28, \"lng\": 112.79},\n    {\"lat\": -7.29, \"lng\": 112.80}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "2 km in 20 min = 6 km/h -> 201 verified, 420 g CO2. Omit mission_id to use default mobility mission."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });",
+                  "pm.test('Verified with CO2', function(){ var d=pm.response.json().data; pm.expect(d.status).to.eql('verified'); pm.expect(d.co2_saved_grams).to.eql(420); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Speed Reject (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activity_type\": \"cycling\",\n  \"distance_km\": 10,\n  \"duration_seconds\": 600,\n  \"gps_coordinates_path\": [\n    {\"lat\": -7.28, \"lng\": 112.79},\n    {\"lat\": -7.29, \"lng\": 112.80}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "10 km in 10 min = 60 km/h -> 422 rejected, no rewards."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Rejected', function(){ pm.expect(pm.response.json().data.status).to.eql('rejected'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Validation Fail (Missing Fields)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "Empty body -> 422 with errors for activity_type/distance_km/duration_seconds/gps_coordinates_path."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Fail (Unauthorized)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activity_type\": \"walking\",\n  \"distance_km\": 1,\n  \"duration_seconds\": 900,\n  \"gps_coordinates_path\": [\n    {\"lat\": -7.28, \"lng\": 112.79},\n    {\"lat\": -7.29, \"lng\": 112.80}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "response": []
         }
       ]
