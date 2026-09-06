@@ -107,73 +107,81 @@ class _DompetVoucherScreenState extends State<DompetVoucherScreen> {
 
   Widget _buildTabBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       color: const Color(0xFFF5F9F6),
-      child: Row(
-        children: List.generate(_tabLabels.length, (index) {
-          final isSelected = _selectedTab == index;
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedTab = index;
-              });
-            },
-            child: Container(
-              margin: EdgeInsets.only(
-                right: index < _tabLabels.length - 1 ? 12 : 0,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF1E6C46)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _tabLabels[index],
-                    style: TextStyle(
-                      color: isSelected
-                          ? Colors.white
-                          : const Color(0xFF6B7B74),
-                      fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
-                    ),
-                  ),
-                  if (_tabCounts[index] > 0) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: List.generate(_tabLabels.length, (index) {
+            final isSelected = _selectedTab == index;
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedTab = index;
+                });
+              },
+              child: Container(
+                margin: EdgeInsets.only(
+                  right: index < _tabLabels.length - 1 ? 12 : 0,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF1E6C46)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _tabLabels[index],
+                      style: TextStyle(
                         color: isSelected
-                            ? Colors.white.withValues(alpha: 0.25)
-                            : const Color(0xFFE0E5E2),
-                        borderRadius: BorderRadius.circular(10),
+                            ? Colors.white
+                            : const Color(0xFF6B7B74),
+                        fontSize: 13,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                       ),
-                      child: Text(
-                        '${_tabCounts[index]}',
-                        style: TextStyle(
+                    ),
+                    if (_tabCounts[index] > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.white
-                              : const Color(0xFF6B7B74),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                              ? Colors.white.withValues(alpha: 0.25)
+                              : const Color(0xFFE0E5E2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${_tabCounts[index]}',
+                          style: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : const Color(0xFF6B7B74),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }

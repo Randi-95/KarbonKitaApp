@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'misi_scan_screen.dart';
+import 'mobility_tracker_screen.dart';
+
 class MisiScreen extends StatefulWidget {
   const MisiScreen({super.key});
 
@@ -78,8 +81,18 @@ class _MisiScreenState extends State<MisiScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
-                      Text('Riset dalam', style: TextStyle(fontSize: 10, color: Colors.green)),
-                      Text('10:45:12', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                      Text(
+                        'Riset dalam',
+                        style: TextStyle(fontSize: 10, color: Colors.green),
+                      ),
+                      Text(
+                        '10:45:12',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -103,13 +116,17 @@ class _MisiScreenState extends State<MisiScreen> {
                   ),
                   Text(
                     'Aktif',
-                    style: TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
             ),
           ],
-        )
+        ),
       ],
     );
   }
@@ -125,7 +142,7 @@ class _MisiScreenState extends State<MisiScreen> {
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
-          )
+          ),
         ],
       ),
       child: Row(
@@ -169,7 +186,7 @@ class _MisiScreenState extends State<MisiScreen> {
               color: isSelected ? Colors.green : Colors.transparent,
               borderRadius: BorderRadius.circular(2),
             ),
-          )
+          ),
         ],
       ),
     );
@@ -190,6 +207,17 @@ class _MisiScreenState extends State<MisiScreen> {
           points: '+150',
           buttonText: 'Mulai Tracker',
           buttonColor: Colors.green,
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MobilityTrackerScreen(
+                  missionTitle: 'Pejuang Pedal 2Km',
+                  activityType: 'cycling',
+                ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 15),
         _buildMissionCard(
@@ -204,6 +232,16 @@ class _MisiScreenState extends State<MisiScreen> {
           points: '+300',
           buttonText: 'Upload Foto',
           buttonColor: Colors.green,
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MisiScanScreen(
+                  missionTitle: 'Pahlawan Plastik Terpilah',
+                ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 15),
         _buildMissionCard(
@@ -216,7 +254,7 @@ class _MisiScreenState extends State<MisiScreen> {
           title: 'Petualangan Kuis Hijau',
           description: 'Kerjakan kuis harian untuk tetap mempertahankan Streak',
           points: '+30',
-          buttonText: 'Mulai Tracker',
+          buttonText: 'Mulai Quiz',
           buttonColor: Colors.orange,
         ),
       ],
@@ -235,6 +273,7 @@ class _MisiScreenState extends State<MisiScreen> {
     required String points,
     required String buttonText,
     required Color buttonColor,
+    VoidCallback? onPressed,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -246,7 +285,7 @@ class _MisiScreenState extends State<MisiScreen> {
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -272,7 +311,10 @@ class _MisiScreenState extends State<MisiScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: categoryColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
@@ -284,7 +326,11 @@ class _MisiScreenState extends State<MisiScreen> {
                           const SizedBox(width: 4),
                           Text(
                             categoryLabel,
-                            style: TextStyle(fontSize: 10, color: categoryColor, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: categoryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ],
                       ),
@@ -302,7 +348,10 @@ class _MisiScreenState extends State<MisiScreen> {
                     const SizedBox(height: 6),
                     Text(
                       description,
-                      style: const TextStyle(fontSize: 10, color: Colors.black54),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.black54,
+                      ),
                     ),
                   ],
                 ),
@@ -314,7 +363,10 @@ class _MisiScreenState extends State<MisiScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F8E9),
                   borderRadius: BorderRadius.circular(10),
@@ -326,18 +378,22 @@ class _MisiScreenState extends State<MisiScreen> {
                       'assets/images/ecopoints.png',
                       width: 20,
                       height: 20,
-                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Colors.green, size: 20),
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.eco, color: Colors.green, size: 20),
                     ),
                     const SizedBox(width: 4),
                     Column(
                       children: [
                         Text(
                           points,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const Text('Poin', style: TextStyle(fontSize: 10)),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -345,17 +401,25 @@ class _MisiScreenState extends State<MisiScreen> {
               SizedBox(
                 height: 36,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: onPressed ?? () {},
                   style: ElevatedButton.styleFrom(
                     backgroundColor: buttonColor,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     elevation: 0,
                   ),
                   child: Text(
                     buttonText,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
