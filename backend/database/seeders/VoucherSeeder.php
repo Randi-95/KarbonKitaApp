@@ -13,7 +13,7 @@ class VoucherSeeder extends Seeder
     {
         $mitraUser = User::where('email', 'kopilokal@example.com')->first();
 
-        if (!$mitraUser) {
+        if (! $mitraUser) {
             return;
         }
 

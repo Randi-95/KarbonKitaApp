@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\LoginRequest;
+use App\Http\Requests\RegisterRequest;
 use App\Models\User;
-use App\Models\WargaProfile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -18,12 +17,14 @@ class AuthController extends Controller
         $validated = $request->validated();
 
         $user = DB::transaction(function () use ($validated) {
+            // Endpoint ini selalu membuat WARGA. Mitra wajib lewat
+            // POST /api/auth/register-mitra (dengan dokumen + verifikasi).
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'phone' => $validated['phone'],
                 'password' => Hash::make($validated['password']),
-                'role' => $validated['role'],
+                'role' => 'warga',
                 'kota' => $validated['city'],
                 'kecamatan' => $validated['district'],
                 'kelurahan' => $validated['sub_district'],
@@ -69,7 +70,7 @@ class AuthController extends Controller
 
         $credential['password'] = $validated['password'];
 
-        if (!Auth::attempt($credential, false)) {
+        if (! Auth::attempt($credential, false)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid credentials.',
@@ -78,7 +79,7 @@ class AuthController extends Controller
 
         $user = Auth::user();
 
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'Account is deactivated. Please contact support.',

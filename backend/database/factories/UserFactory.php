@@ -26,10 +26,40 @@ class UserFactory extends Factory
         return [
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
+            'phone' => fake()->unique()->numerify('+6281#########'),
             'password' => static::$password ??= Hash::make('password'),
+            'role' => 'warga',
+            'kota' => 'Surabaya',
+            'kecamatan' => 'Gubeng',
+            'kelurahan' => fake()->city(),
+            'rt' => fake()->numerify('00#'),
+            'rw' => fake()->numerify('0#'),
+            'is_active' => true,
+            'email_verified_at' => now(),
             'remember_token' => Str::random(10),
         ];
+    }
+
+    public function warga(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'warga',
+        ]);
+    }
+
+    public function mitra(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'mitra',
+            'phone' => fake()->unique()->numerify('+6282#########'),
+        ]);
+    }
+
+    public function admin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'admin',
+        ]);
     }
 
     /**

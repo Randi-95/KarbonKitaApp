@@ -13,6 +13,7 @@ class Mission extends Model
     protected $fillable = [
         'title',
         'description',
+        'validation_prompt',
         'category',
         'xp_reward',
         'points_reward',

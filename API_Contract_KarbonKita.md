@@ -23,8 +23,9 @@ Proyek ini menggunakan **Laravel Sanctum** sebagai standar autentikasi API. Sanc
 
 ## 2. MODUL: AUTENTIKASI (POST)
 
-### 1. Register Akun Baru
+### 1. Register Akun Baru (Warga)
 * **Endpoint**: `POST /api/auth/register`
+* **Catatan**: Endpoint ini selalu membuat role `warga`. Field `role` kalau dikirim akan diabaikan. Pendaftaran mitra UMKM hanya lewat `POST /api/auth/register-mitra` (multipart + dokumen, lihat folder Postman "Mitra Register").
 * **Request Body**:
 ```json
 {
@@ -33,7 +34,6 @@ Proyek ini menggunakan **Laravel Sanctum** sebagai standar autentikasi API. Sanc
   "email": "rafi@example.com",
   "password": "SecurePassword123!",
   "password_confirmation": "SecurePassword123!",
-  "role": "warga",
   "city": "Surabaya", "district": "Gubeng", "sub_district": "Mojo", "rt": "005", "rw": "02"
 }
 ```

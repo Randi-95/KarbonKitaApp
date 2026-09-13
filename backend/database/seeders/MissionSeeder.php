@@ -23,6 +23,7 @@ class MissionSeeder extends Seeder
             [
                 'title' => 'Pahlawan Plastik Terpilah',
                 'description' => 'Ambil foto hasil pilah sampahmu dan dapatkan poin!',
+                'validation_prompt' => 'Foto harus menunjukkan sampah PLASTIK yang sudah dipilah dan dikumpulkan terpisah dalam wadah atau kantong khusus. Tolak foto yang sampahnya tercampur, bukan plastik, atau tidak menunjukkan upaya pemilahan.',
                 'category' => 'waste',
                 'xp_reward' => 300,
                 'points_reward' => 100,
@@ -33,7 +34,8 @@ class MissionSeeder extends Seeder
             [
                 'title' => 'Donasi Pohon Mangrove',
                 'description' => 'Donasikan pohon mangrove untuk menjaga garis pantai!',
-                'category' => 'waste',
+                'validation_prompt' => null,
+                'category' => 'donation',
                 'xp_reward' => 100,
                 'points_reward' => 25,
                 'icon' => 'park',
@@ -73,6 +75,7 @@ class MissionSeeder extends Seeder
             [
                 'title' => 'Pilah Sampah Elektronik',
                 'description' => 'Pilah sampah elektronik dengan benar dan dapatkan poin!',
+                'validation_prompt' => 'Foto harus menunjukkan sampah ELEKTRONIK yang sudah dipilah dan dikumpulkan terpisah. Tolak foto yang bukan e-waste atau tercampur sampah lain.',
                 'category' => 'waste',
                 'xp_reward' => 250,
                 'points_reward' => 80,

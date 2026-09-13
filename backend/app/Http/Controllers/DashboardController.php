@@ -19,7 +19,7 @@ class DashboardController extends Controller
 
         $profile = WargaProfile::where('user_id', $user->id)->first();
 
-        if (!$profile) {
+        if (! $profile) {
             return response()->json([
                 'success' => false,
                 'message' => 'User profile not found.',
@@ -50,7 +50,9 @@ class DashboardController extends Controller
     {
         $totalUsers = WargaProfile::count();
 
-        if ($totalUsers <= 1) return 100.0;
+        if ($totalUsers <= 1) {
+            return 100.0;
+        }
 
         $usersAbove = WargaProfile::where('xp', '>', $userXp)->count();
 
@@ -93,6 +95,7 @@ class DashboardController extends Controller
             ->map(function ($item, $key) {
                 $item->rank = $key + 1;
                 $item->avatar = null;
+
                 return $item;
             });
 

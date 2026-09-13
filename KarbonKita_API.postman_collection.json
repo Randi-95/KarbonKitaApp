@@ -2,7 +2,7 @@
   "info": {
     "name": "KarbonKita API",
     "_postman_id": "karbonkita-api-collection",
-    "description": "API Collection for KarbonKita - Aksi kecil, dampak besar\n\n## Authentication\nAll protected endpoints require Bearer Token in Authorization header.\n\n## Base URL\nhttp://localhost:8000",
+    "description": "## Cara pakai (wajib)\n1. Import BOTH files ke Postman: KarbonKita_API.postman_collection.json DAN KarbonKita.postman_environment.json.\n2. Pilih environment \"KarbonKita Local\" di dropdown kanan atas (JANGAN pakai No Environment).\n3. Semua token/variable terisi OTOMATIS via test script (pm.environment). Jangan isi manual.\n4. Kalau request 401 padahal sudah login: pastikan environment \"KarbonKita Local\" yang aktif, bukan environment lain.\n\nAPI Collection for KarbonKita - Aksi kecil, dampak besar\n\n## Authentication\nAll protected endpoints require Bearer Token: Authorization: Bearer {{auth_token}}\n\n## Base URL\n{{base_url}} = http://localhost:8000\n\n## Flow\n1. Register / Login -> token auto-saved to auth_token\n2. Use protected endpoints\n3. Saga: GET /saga/quizzes -> POST /saga/answer (A/B/C/D) -> GET again shows completed\n\n## Security Notes\n- Timezone streak: Asia/Jakarta (WIB)\n- Quiz: 1 random per hari, retry until correct, XP only (no eco_points). WRONG answer does NOT leak correct_answer/explanation (anti-cheat). Correct answer only visible via GET after verified (is_completed_today=true) or via DB seeder QuizSeeder.php.\n- Throttle: POST /saga/answer limited 10 req/min (anti brute-force)\n- Vouchers: DB::transaction + lockForUpdate, seeded mitra kopilokal@example.com\n- Task 0 (Fase 4 fondasi): role middleware + AdminSeeder. Login admin di atas untuk isi admin_token.\n- Task 2 (Fase 4): folder Merchant (dashboard + toggle). Setup login kopilokal dulu untuk mitra_token.\n- Task 3 (Fase 4): redeem QR di folder Merchant (butuh qr_token dari claim + mitra_token).\n- Task 4 (Fase 4): folder Admin (pending + verify, pakai admin_token). Setup register mitra fresh untuk bahan verify.\n\n## End-to-end Fase 4 (jalankan berurutan)\n1. Authentication > Register/Login warga (auth_token) dan Login Admin (admin_token)\n2. Marketplace > Claim Voucher - Success (isi qr_token otomatis)\n3. Merchant > Setup Login Mitra (mitra_token) > Dashboard > Redeem Success > Double 409\n4. Admin > Setup Register Mitra > Pending List (salin id mitra_profile ke pending_mitra_id) > Approve > Re-verify 409\n5. Mitra yang di-approve bisa langsung redeem (langkah 3).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,14 +13,63 @@
     {
       "key": "auth_token",
       "value": ""
+    },
+    {
+      "key": "quiz_id",
+      "value": ""
+    },
+    {
+      "key": "correct_answer",
+      "value": ""
+    },
+    {
+      "key": "claim_id",
+      "value": ""
+    },
+    {
+      "key": "qr_token",
+      "value": ""
+    },
+    {
+      "key": "waste_mission_id",
+      "value": ""
+    },
+    {
+      "key": "mobility_mission_id",
+      "value": ""
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "mitra_token",
+      "value": ""
+    },
+    {
+      "key": "pending_mitra_id",
+      "value": ""
     }
   ],
   "item": [
     {
-      "name": "🔐 Authentication",
+      "name": "Authentication",
       "item": [
         {
-          "name": "Register",
+          "name": "Register - Success (Warga)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Created', function(){ pm.response.to.have.status(201); });",
+                  "pm.test('Success true and has token', function(){ var j=pm.response.json(); pm.expect(j.success).to.be.true; pm.expect(j.data).to.have.property('token'); pm.expect(j.data.user.role).to.eql('warga'); });",
+                  "var j=pm.response.json(); if(j.success && j.data.token){ pm.environment.set('auth_token', j.data.token); console.log('auth_token saved'); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -31,29 +80,156 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Moch. Rafi Andi\",\n  \"phone\": \"+628123456789\",\n  \"email\": \"rafi@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"password_confirmation\": \"SecurePassword123!\",\n  \"role\": \"warga\",\n  \"city\": \"Surabaya\",\n  \"district\": \"Gubeng\",\n  \"sub_district\": \"Mojo\",\n  \"rt\": \"005\",\n  \"rw\": \"02\"\n}"
+              "raw": "{\n  \"name\": \"Moch. Rafi Andi\",\n  \"phone\": \"+628120000{{$randomInt}}\",\n  \"email\": \"rafi_{{$randomInt}}@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"password_confirmation\": \"SecurePassword123!\",\n  \"city\": \"Surabaya\",\n  \"district\": \"Gubeng\",\n  \"sub_district\": \"Mojo\",\n  \"rt\": \"005\",\n  \"rw\": \"02\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/auth/register",
-              "host": ["{{base_url}}"],
-              "path": ["api", "auth", "register"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
             },
-            "description": "Register new warga account"
+            "description": "Register warga success. Use {{$randomInt}} to avoid duplicate email/phone on rerun."
           },
           "response": []
         },
         {
-          "name": "Login",
+          "name": "Register - Validation Fail (Duplicate Email)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.success && jsonData.data.token) {",
-                  "    pm.collectionVariables.set('auth_token', jsonData.data.token);",
-                  "    console.log('Token saved: ' + jsonData.data.token);",
-                  "}"
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Has errors.email', function(){ pm.expect(pm.response.json().errors).to.have.property('email'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Duplicate\",\n  \"phone\": \"+628123456780\",\n  \"email\": \"rafi@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"password_confirmation\": \"SecurePassword123!\",\n  \"city\": \"Surabaya\",\n  \"district\": \"Gubeng\",\n  \"sub_district\": \"Mojo\",\n  \"rt\": \"005\",\n  \"rw\": \"02\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Seeded user rafi@example.com already exists -> expect 422 errors.email"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Validation Fail (Missing Fields)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Has errors', function(){ var j=pm.response.json(); pm.expect(j.success).to.be.false; pm.expect(j.errors).to.be.an('object'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Missing required fields -> 422 with errors object"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Validation Fail (Invalid Phone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Has errors.phone', function(){ pm.expect(pm.response.json().errors).to.have.property('phone'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test\",\n  \"phone\": \"08123456789\",\n  \"email\": \"invalidphone_{{$randomInt}}@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"password_confirmation\": \"SecurePassword123!\",\n  \"city\": \"Surabaya\",\n  \"district\": \"Gubeng\",\n  \"sub_district\": \"Mojo\",\n  \"rt\": \"005\",\n  \"rw\": \"02\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Phone must be +628... (regex ^\\+[0-9]{10,15}$) -> 422"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Success (Email)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has token', function(){ pm.expect(pm.response.json().data).to.have.property('token'); });",
+                  "var j=pm.response.json(); if(j.success && j.data.token){ pm.environment.set('auth_token', j.data.token); }"
                 ],
                 "type": "text/javascript"
               }
@@ -73,15 +249,219 @@
             },
             "url": {
               "raw": "{{base_url}}/api/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             },
-            "description": "Login with email or phone. Token will be saved to collection variable 'auth_token'"
+            "description": "Login with seeded warga rafi@example.com (password from seeder is 'password' if using factory, else SecurePassword123!). Token saved to auth_token."
           },
           "response": []
         },
         {
-          "name": "Logout",
+          "name": "Login - Success (Phone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 via phone', function(){ pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_or_email\": \"+628120000{{$randomInt}}\",\n  \"password\": \"SecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login via phone_or_email = phone number"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Success (Admin, seeded)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 admin', function(){ pm.response.to.have.status(200); });",
+                  "var j=pm.response.json(); if(j.success && j.data.token){ pm.environment.set('admin_token', j.data.token); console.log('admin_token saved'); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_or_email\": \"admin@karbonkita.id\",\n  \"password\": \"SecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Task 0: login admin seeded via AdminSeeder (php artisan db:seed --class=AdminSeeder). Token saved to admin_token for Phase-4 admin endpoints. Role = admin (DB enum; docs call it Super Admin)."
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Fail (Wrong Password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });",
+                  "pm.test('Success false', function(){ pm.expect(pm.response.json().success).to.be.false; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_or_email\": \"rafi@example.com\",\n  \"password\": \"WrongPassword!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Wrong password -> 401 Invalid credentials"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Fail (Unregistered Email)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_or_email\": \"unknown@example.com\",\n  \"password\": \"SecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Unknown email -> 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has user', function(){ pm.expect(pm.response.json().data).to.have.property('id'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user"
+              ]
+            },
+            "description": "Extra endpoint not in contract - returns auth()->user()"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout - Success",
           "request": {
             "method": "POST",
             "header": [
@@ -92,54 +472,504 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/auth/logout",
-              "host": ["{{base_url}}"],
-              "path": ["api", "auth", "logout"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
             },
-            "description": "Logout and revoke current token"
+            "description": "Revoke current token. Subsequent requests with same token -> 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout - Fail (No Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Without Authorization header -> 401 Unauthenticated"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "🏠 Dashboard (Beranda)",
+      "name": "Mitra Register",
+      "description": "Pendaftaran khusus Mitra UMKM (multipart). JALANKAN BERURUTAN: 1) Register success (isi pending_mitra_id + mitra_token otomatis) -> 2) Admin detail/verify di folder Admin. ATTACH file jpg/png ke 5 key file sebelum kirim (Body > form-data > Select Files). Nomor HP boleh 08... (otomatis dinormalisasi ke +62).",
       "item": [
         {
-          "name": "Get Dashboard Data",
+          "name": "Register Mitra - Success",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/auth/register-mitra",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register-mitra"
+              ]
+            },
+            "description": "Sukses -> 201 pending + format_valid (BCA 10 digit). Token disimpan ke mitra_token, id ke pending_mitra_id untuk verify admin.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Hendra",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "hendra.kopigembira@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "+628120000{{$randomInt}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "SecurePassword123!",
+                  "type": "text"
+                },
+                {
+                  "key": "password_confirmation",
+                  "value": "SecurePassword123!",
+                  "type": "text"
+                },
+                {
+                  "key": "city",
+                  "value": "Surabaya",
+                  "type": "text"
+                },
+                {
+                  "key": "district",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "sub_district",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "rt",
+                  "value": "003",
+                  "type": "text"
+                },
+                {
+                  "key": "rw",
+                  "value": "02",
+                  "type": "text"
+                },
+                {
+                  "key": "nama_usaha",
+                  "value": "Kedai Kopi & Bakery Nusantara",
+                  "type": "text"
+                },
+                {
+                  "key": "jenis_usaha",
+                  "value": "Makanan & Minuman",
+                  "type": "text"
+                },
+                {
+                  "key": "alamat_usaha",
+                  "value": "Jl. Arif Rahman Hakim No 03, RT 03/RW 02",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kelurahan",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kecamatan",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kota",
+                  "value": "Surabaya",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_provinsi",
+                  "value": "Jawa Timur",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kode_pos",
+                  "value": "60111",
+                  "type": "text"
+                },
+                {
+                  "key": "nomor_ktp",
+                  "value": "357811160190{{$randomInt}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nomor_nib",
+                  "value": "91201012{{$randomInt}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nama_bank",
+                  "value": "Bank BCA",
+                  "type": "text"
+                },
+                {
+                  "key": "nomor_rekening",
+                  "value": "1234567890",
+                  "type": "text"
+                },
+                {
+                  "key": "nama_pemilik_rekening",
+                  "value": "Hendra",
+                  "type": "text"
+                },
+                {
+                  "key": "foto_ktp",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_nib",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_toko",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_toko_2",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_toko_3",
+                  "value": "",
+                  "type": "file"
+                }
+              ]
+            }
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response has success field', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.success).to.be.true;",
-                  "});",
-                  "",
-                  "pm.test('Response has user data', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('user');",
-                  "    pm.expect(jsonData.data.user).to.have.property('name');",
-                  "    pm.expect(jsonData.data.user).to.have.property('eco_points');",
-                  "    pm.expect(jsonData.data.user).to.have.property('xp');",
-                  "    pm.expect(jsonData.data.user).to.have.property('level');",
-                  "});",
-                  "",
-                  "pm.test('Response has daily_missions', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('daily_missions');",
-                  "    pm.expect(jsonData.data.daily_missions).to.be.an('array');",
-                  "});",
-                  "",
-                  "pm.test('Response has leaderboard_preview', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('leaderboard_preview');",
-                  "    pm.expect(jsonData.data.leaderboard_preview).to.be.an('array');",
-                  "});"
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });",
+                  "pm.test('Pending + format_valid', function(){ var j=pm.response.json(); pm.expect(j.data.mitra.status_verifikasi).to.eql('pending'); pm.expect(j.data.mitra.bank_validation_status).to.eql('format_valid'); });",
+                  "var j=pm.response.json(); if(j.success){ if(j.data.token) pm.environment.set('mitra_token', j.data.token); if(j.data.mitra) pm.environment.set('pending_mitra_id', j.data.mitra.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Mitra - Manual Review (Unknown Bank)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/auth/register-mitra",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register-mitra"
+              ]
+            },
+            "description": "Bank di luar allowlist -> tetap 201 tapi bank_validation_status=manual_review, masuk antrean admin.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Hendra",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "hendra.kopigembira@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "+628120000{{$randomInt}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "SecurePassword123!",
+                  "type": "text"
+                },
+                {
+                  "key": "password_confirmation",
+                  "value": "SecurePassword123!",
+                  "type": "text"
+                },
+                {
+                  "key": "city",
+                  "value": "Surabaya",
+                  "type": "text"
+                },
+                {
+                  "key": "district",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "sub_district",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "rt",
+                  "value": "003",
+                  "type": "text"
+                },
+                {
+                  "key": "rw",
+                  "value": "02",
+                  "type": "text"
+                },
+                {
+                  "key": "nama_usaha",
+                  "value": "Kedai Kopi & Bakery Nusantara",
+                  "type": "text"
+                },
+                {
+                  "key": "jenis_usaha",
+                  "value": "Makanan & Minuman",
+                  "type": "text"
+                },
+                {
+                  "key": "alamat_usaha",
+                  "value": "Jl. Arif Rahman Hakim No 03, RT 03/RW 02",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kelurahan",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kecamatan",
+                  "value": "Sukolilo",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kota",
+                  "value": "Surabaya",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_provinsi",
+                  "value": "Jawa Timur",
+                  "type": "text"
+                },
+                {
+                  "key": "usaha_kode_pos",
+                  "value": "60111",
+                  "type": "text"
+                },
+                {
+                  "key": "nomor_ktp",
+                  "value": "357811160190{{$randomInt}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nomor_nib",
+                  "value": "91201012{{$randomInt}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nama_bank",
+                  "value": "Bank Arta Kedaton",
+                  "type": "text"
+                },
+                {
+                  "key": "nomor_rekening",
+                  "value": "1234567890",
+                  "type": "text"
+                },
+                {
+                  "key": "nama_pemilik_rekening",
+                  "value": "Hendra",
+                  "type": "text"
+                },
+                {
+                  "key": "foto_ktp",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_nib",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_toko",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_toko_2",
+                  "value": "",
+                  "type": "file"
+                },
+                {
+                  "key": "foto_toko_3",
+                  "value": "",
+                  "type": "file"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 manual_review', function(){ pm.response.to.have.status(201); pm.expect(pm.response.json().data.mitra.bank_validation_status).to.eql('manual_review'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Mitra - Validation Fail (Missing Docs)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/register-mitra",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register-mitra"
+              ]
+            },
+            "description": "Tanpa file/dokumen -> 422 errors.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hendra\",\n  \"role\": \"mitra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin - Merchant Detail (Validasi Screen)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/merchants/{{pending_mitra_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "merchants",
+                "{{pending_mitra_id}}"
+              ]
+            },
+            "description": "Detail 1 pengajuan untuk layar Validasi Mitra UMKM: toko, owner, lokasi usaha, foto toko 1-3, dokumen KTP/NIB, blok rekening + bank_validation_status."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has validation blocks', function(){ var d=pm.response.json().data; pm.expect(d).to.have.property('foto_toko'); pm.expect(d).to.have.property('dokumen'); pm.expect(d).to.have.property('rekening'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has user and missions', function(){ var j=pm.response.json(); pm.expect(j.success).to.be.true; pm.expect(j.data.user).to.have.property('xp'); pm.expect(j.data).to.have.property('daily_missions'); pm.expect(j.data).to.have.property('leaderboard_preview'); });"
                 ],
                 "type": "text/javascript"
               }
@@ -155,52 +985,63 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/user/dashboard",
-              "host": ["{{base_url}}"],
-              "path": ["api", "user", "dashboard"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "dashboard"
+              ]
             },
-            "description": "Get user dashboard data including profile, daily missions, and leaderboard preview"
+            "description": "Dashboard warga: user xp/level/eco_points/streak + daily_missions(3 random) + leaderboard_preview(top3 rt/rw)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Dashboard - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/user/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "dashboard"
+              ]
+            },
+            "description": "No token -> 401"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "🏆 Leaderboard",
+      "name": "Leaderboard",
       "item": [
         {
-          "name": "Get Leaderboard - RT Weekly",
+          "name": "Get Leaderboard - RT Weekly (Success)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response has success field', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.success).to.be.true;",
-                  "});",
-                  "",
-                  "pm.test('Response has rankings array', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('rankings');",
-                  "    pm.expect(jsonData.data.rankings).to.be.an('array');",
-                  "});",
-                  "",
-                  "pm.test('Response has scope and timeframe', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('scope');",
-                  "    pm.expect(jsonData.data).to.have.property('timeframe');",
-                  "    pm.expect(jsonData.data.scope).to.equal('rt');",
-                  "    pm.expect(jsonData.data.timeframe).to.equal('weekly');",
-                  "});",
-                  "",
-                  "pm.test('Response has current_user', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('current_user');",
-                  "});"
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Scope rt weekly', function(){ var d=pm.response.json().data; pm.expect(d.scope).to.eql('rt'); pm.expect(d.timeframe).to.eql('weekly'); pm.expect(d.rankings).to.be.an('array'); pm.expect(d).to.have.property('current_user'); });"
                 ],
                 "type": "text/javascript"
               }
@@ -216,40 +1057,70 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/leaderboard?scope=rt&timeframe=weekly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "leaderboard"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "leaderboard"
+              ],
               "query": [
                 {
                   "key": "scope",
-                  "value": "rt",
-                  "description": "Scope: rt or rw"
+                  "value": "rt"
                 },
                 {
                   "key": "timeframe",
-                  "value": "weekly",
-                  "description": "Timeframe: weekly or monthly"
+                  "value": "weekly"
                 }
               ]
             },
-            "description": "Get leaderboard filtered by RT for current week"
+            "description": "Leaderboard RT weekly - sum missions.xp_reward verified"
           },
           "response": []
         },
         {
-          "name": "Get Leaderboard - RT Monthly",
+          "name": "Get Leaderboard - RW Weekly (Success)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?scope=rw&timeframe=weekly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "leaderboard"
+              ],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "rw"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "weekly"
+                }
+              ]
+            },
+            "description": "Leaderboard RW weekly"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Leaderboard - RT Monthly (Success)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response is monthly', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data.timeframe).to.equal('monthly');",
-                  "});"
+                  "pm.test('Timeframe monthly', function(){ pm.expect(pm.response.json().data.timeframe).to.eql('monthly'); });"
                 ],
                 "type": "text/javascript"
               }
@@ -265,8 +1136,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/leaderboard?scope=rt&timeframe=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "leaderboard"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "leaderboard"
+              ],
               "query": [
                 {
                   "key": "scope",
@@ -278,12 +1154,23 @@
                 }
               ]
             },
-            "description": "Get leaderboard filtered by RT for current month"
+            "description": "Leaderboard monthly range = subMonth()"
           },
           "response": []
         },
         {
-          "name": "Get Leaderboard - RW Weekly",
+          "name": "Get Leaderboard - Validation Fail (Invalid Scope)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -293,13 +1180,18 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/leaderboard?scope=rw&timeframe=weekly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "leaderboard"],
+              "raw": "{{base_url}}/api/leaderboard?scope=invalid&timeframe=weekly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "leaderboard"
+              ],
               "query": [
                 {
                   "key": "scope",
-                  "value": "rw"
+                  "value": "invalid"
                 },
                 {
                   "key": "timeframe",
@@ -307,48 +1199,1137 @@
                 }
               ]
             },
-            "description": "Get leaderboard filtered by RW for current week"
+            "description": "scope must be rt|rw -> 422"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Leaderboard - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?scope=rt&timeframe=weekly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "leaderboard"
+              ],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "rt"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "weekly"
+                }
+              ]
+            },
+            "description": "No token -> 401"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "🛒 Marketplace & Rewards",
+      "name": "Missions",
       "item": [
         {
-          "name": "Get Marketplace Vouchers",
+          "name": "Get Active Missions - Success",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response has success field', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.success).to.be.true;",
-                  "});",
-                  "",
-                  "pm.test('Response has vouchers array', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.be.an('array');",
-                  "});",
-                  "",
-                  "pm.test('Voucher has required fields', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    if (jsonData.data.length > 0) {",
-                  "        var voucher = jsonData.data[0];",
-                  "        pm.expect(voucher).to.have.property('id');",
-                  "        pm.expect(voucher).to.have.property('title');",
-                  "        pm.expect(voucher).to.have.property('points_cost');",
-                  "        pm.expect(voucher).to.have.property('rupiah_value');",
-                  "        pm.expect(voucher).to.have.property('stock');",
-                  "        pm.expect(voucher).to.have.property('mitra');",
-                  "    }",
-                  "});"
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Only mobility/waste', function(){ var d=pm.response.json().data; pm.expect(d).to.be.an('array'); d.forEach(function(m){ pm.expect(['mobility','waste']).to.include(m.category); }); });",
+                  "var d=pm.response.json().data; var w=d.find(function(m){return m.category==='waste';}); var mo=d.find(function(m){return m.category==='mobility';}); if(w) pm.environment.set('waste_mission_id', w.id); if(mo) pm.environment.set('mobility_mission_id', mo.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/missions/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "active"
+              ]
+            },
+            "description": "List active mobility & waste missions (quiz excluded). Saves waste_mission_id + mobility_mission_id."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Missions - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/missions/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "active"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Success (Mock AI)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "mission_id",
+                  "value": "{{waste_mission_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "ATTACH a jpeg/png file to the 'image' key first (Body > form-data > select file). Mock AI (GEMINI_MOCK=true) returns 201 verified + XP/points. Re-run with a DIFFERENT photo or expect 409 duplicate."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });",
+                  "pm.test('Verified with rewards', function(){ var d=pm.response.json().data; pm.expect(d.status).to.eql('verified'); pm.expect(d.xp_earned).to.be.above(0); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Duplicate (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "mission_id",
+                  "value": "{{waste_mission_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "Re-send the SAME photo as the Success request -> 409 anti_fraud_flagged, no extra points."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', function(){ pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Validation Fail (Missing Image)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "mission_id",
+                  "value": "{{waste_mission_id}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "No image key -> 422 errors.image"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Errors has image', function(){ pm.expect(pm.response.json().errors).to.have.property('image'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Validation Fail (Wrong Mission)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mission_id\": 9999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "Non-existent mission (or quiz/mobility id) -> 422 errors.mission_id. Note: needs multipart without file, sent as JSON to show the mission check."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Verify Waste - Fail (Unauthorized)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/missions/verify-waste",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "verify-waste"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Success (Cycling)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mission_id\": {{mobility_mission_id}},\n  \"activity_type\": \"cycling\",\n  \"distance_km\": 2,\n  \"duration_seconds\": 1200,\n  \"gps_coordinates_path\": [\n    {\"lat\": -7.28, \"lng\": 112.79},\n    {\"lat\": -7.29, \"lng\": 112.80}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "2 km in 20 min = 6 km/h -> 201 verified, 420 g CO2. Omit mission_id to use default mobility mission."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });",
+                  "pm.test('Verified with CO2', function(){ var d=pm.response.json().data; pm.expect(d.status).to.eql('verified'); pm.expect(d.co2_saved_grams).to.eql(420); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Speed Reject (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activity_type\": \"cycling\",\n  \"distance_km\": 10,\n  \"duration_seconds\": 600,\n  \"gps_coordinates_path\": [\n    {\"lat\": -7.28, \"lng\": 112.79},\n    {\"lat\": -7.29, \"lng\": 112.80}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "10 km in 10 min = 60 km/h -> 422 rejected, no rewards."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Rejected', function(){ pm.expect(pm.response.json().data.status).to.eql('rejected'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Validation Fail (Missing Fields)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "Empty body -> 422 with errors for activity_type/distance_km/duration_seconds/gps_coordinates_path."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Mobility Sync - Fail (Unauthorized)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activity_type\": \"walking\",\n  \"distance_km\": 1,\n  \"duration_seconds\": 900,\n  \"gps_coordinates_path\": [\n    {\"lat\": -7.28, \"lng\": 112.79},\n    {\"lat\": -7.29, \"lng\": 112.80}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/missions/mobility-sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "missions",
+                "mobility-sync"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Saga and Quiz",
+      "item": [
+        {
+          "name": "Setup - Register Fresh Quiz User (Isolated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Fresh user', function(){ pm.response.to.have.status(201); });",
+                  "var j=pm.response.json(); if(j.success && j.data.token){ pm.environment.set('auth_token', j.data.token); pm.environment.set('quiz_id',''); pm.environment.set('correct_answer',''); console.log('Fresh quiz user token saved: '+j.data.token); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Quiz Tester {{$randomInt}}\",\n  \"phone\": \"+628951110{{$randomInt}}\",\n  \"email\": \"quiz_{{$randomInt}}_{{$randomInt}}@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"password_confirmation\": \"SecurePassword123!\",\n  \"city\": \"Surabaya\",\n  \"district\": \"Gubeng\",\n  \"sub_district\": \"Mojo\",\n  \"rt\": \"005\",\n  \"rw\": \"02\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "JALANKAN INI DULU sebelum test Saga jika auth_token sebelumnya adalah rafi/seeded user yang sudah selesaikan quiz hari ini. Fresh user belum punya UserMission quiz hari ini, jadi skenario Success tidak akan 409. Disarankan run Saga folder berurutan dari Setup ini."
+          }
+        },
+        {
+          "name": "Get Daily Quiz - Success (1 Random Per Day)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has question and options', function(){ var d=pm.response.json().data; pm.expect(d).to.have.property('question'); pm.expect(d.options).to.be.an('object'); pm.expect(d).to.have.property('is_completed_today'); });",
+                  "pm.test('Hide answer when not completed', function(){ var d=pm.response.json().data; if(!d.is_completed_today){ pm.expect(d).to.not.have.property('correct_answer'); }});",
+                  "var d=pm.response.json().data; if(d && d.id){ pm.environment.set('quiz_id', d.id); console.log('quiz_id saved: '+d.id); if(d.correct_answer) pm.environment.set('correct_answer', d.correct_answer); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/saga/quizzes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "quizzes"
+              ]
+            },
+            "description": "1 quiz random per hari (WIB). Deterministic per user+date. Returns same quiz until answered correctly. Hide correct_answer unless is_completed_today=true."
+          },
+          "response": [],
+          "description": "1 quiz random per hari (WIB). Deterministic per user+date. Returns same quiz until answered correctly. Hide correct_answer unless is_completed_today=true. Jika is_completed_today=true, berarti sudah verified hari ini (seeded user hari ini) -> run Setup request dulu untuk fresh user."
+        },
+        {
+          "name": "Get Daily Quiz - Deterministic Check (Repeat)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Same quiz id as before (deterministic)', function(){ var cur=pm.response.json().data.id; pm.expect(cur.toString()).to.eql(pm.environment.get('quiz_id')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/saga/quizzes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "quizzes"
+              ]
+            },
+            "description": "Call again same day before correct answer -> should return same quiz_id (sticky)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Quiz - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/saga/quizzes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "quizzes"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Answer Quiz - Validation Fail (Missing Fields)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Errors has quiz_id', function(){ pm.expect(pm.response.json().errors).to.have.property('quiz_id'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "Empty body -> 422 errors.quiz_id + errors.answer"
+          },
+          "response": []
+        },
+        {
+          "name": "Answer Quiz - Validation Fail (Invalid Answer Format)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });",
+                  "pm.test('Errors has answer', function(){ pm.expect(pm.response.json().errors).to.have.property('answer'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": 1,\n  \"answer\": \"Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "Answer must be A|B|C|D -> 422"
+          },
+          "response": []
+        },
+        {
+          "name": "Answer Quiz - Validation Fail (Invalid Quiz ID)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": 9999,\n  \"answer\": \"A\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "Non-existent quiz_id -> 422 exists:quizzes,id"
+          },
+          "response": []
+        },
+        {
+          "name": "Answer Quiz - Wrong Answer (Retry Allowed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('is_correct false and no leak', function(){ var d=pm.response.json().data; pm.expect(d.is_correct).to.be.false; pm.expect(d).to.not.have.property('correct_answer'); pm.expect(d).to.not.have.property('explanation'); pm.expect(d.xp_earned).to.eql(0); });",
+                  "pm.test('Secure: no correct_answer leaked', function(){ var raw=pm.response.text(); pm.expect(raw).to.not.include('correct_answer'); });"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Pick wrong answer - try B, if you suspect B is correct, change to A/C/D manually",
+                  "var wrong='B'; pm.variables.set('wrong_answer', wrong);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": {{quiz_id}},\n  \"answer\": \"{{wrong_answer}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "Send wrong answer on purpose. Expect 200 is_correct:false, xp_earned 0, boleh retry. Tip: check correct_answer from DB or try A/B/C/D until correct. If this happens to be correct, status will be 200 is_correct:true instead."
+          },
+          "response": [],
+          "description": "Kirim jawaban SALAH. Response TIDAK mengandung correct_answer/explanation (anti-cheat, aman dari hacker). Expect 200 is_correct:false, xp_earned 0, boleh retry sampai benar. correct_answer hanya terlihat setelah verified via GET Daily Quiz After Completed (is_completed_today=true) atau lihat seeder QuizSeeder.php."
+        },
+        {
+          "name": "Answer Quiz - Success (Correct, XP Only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if(pm.response.code===409){ pm.test('Already completed 409', function(){ pm.expect(pm.response.json().success).to.be.false; }); console.warn('Already completed today - run Setup Fresh Quiz User'); } else { pm.test('Status 200', function(){ pm.response.to.have.status(200); }); pm.test('is_correct true and XP', function(){ var d=pm.response.json().data; pm.expect(d.is_correct).to.be.true; pm.expect(d.xp_earned).to.be.above(0); pm.expect(d).to.not.have.property('correct_answer'); }); }",
+                  "var d=(pm.response.json().data||{}); if(d && d.is_correct){ console.log('Correct! XP:'+d.xp_earned+' streak:'+d.streak_days); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": {{quiz_id}},\n  \"answer\": \"{{correct_answer}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "Send correct answer (set correct_answer var manually from DB or from previous wrong response's correct_answer field, or from GET after completed). Expect XP only, no eco_points change. If correct_answer var empty, replace with A/B/C/D manually."
+          },
+          "response": [],
+          "description": "Kirim jawaban BENAR. correct_answer TIDAK bocor dari Wrong Answer (secure), jadi set variable correct_answer manual: lihat QuizSeeder.php mapping atau coba A/B/C/D (max 4 retry). Setelah Wrong, coba ganti correct_answer var sampai is_correct:true. Expect 200 is_correct:true + xp_earned. Jika 409, sudah completed hari ini -> jalankan Setup Fresh Quiz User."
+        },
+        {
+          "name": "Answer Quiz - Fail (Already Completed Today 409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', function(){ pm.response.to.have.status(409); });",
+                  "pm.test('Message already completed', function(){ pm.expect(pm.response.json().success).to.be.false; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": {{quiz_id}},\n  \"answer\": \"A\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "After correct answer today, any further POST -> 409 You have already completed today. Test after 'Success' request."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Quiz - After Completed (Shows Answer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 with answer visible AFTER verified', function(){ var d=pm.response.json().data; pm.expect(d.is_completed_today).to.be.true; pm.expect(d).to.have.property('correct_answer'); pm.expect(d).to.have.property('explanation'); });",
+                  "var d=pm.response.json().data; if(d && d.correct_answer){ pm.environment.set('correct_answer', d.correct_answer); console.log('Verified answer now visible: '+d.correct_answer); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/saga/quizzes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "quizzes"
+              ]
+            },
+            "description": "After verified today, GET returns same quiz with correct_answer+explanation visible and is_completed_today=true"
+          },
+          "response": []
+        },
+        {
+          "name": "Answer Quiz - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": 1,\n  \"answer\": \"A\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile and Stats",
+      "item": [
+        {
+          "name": "Get Carbon Stats - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has carbon fields', function(){ var d=pm.response.json().data; pm.expect(d).to.have.property('total_carbon_saved_kg'); pm.expect(d).to.have.property('total_distance_km'); pm.expect(d).to.have.property('total_waste_kg'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user/carbon-stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "carbon-stats"
+              ]
+            },
+            "description": "Carbon stats from warga_profiles (not changed by quiz). Quiz only affects xp/streak."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Carbon Stats - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/user/carbon-stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "carbon-stats"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Marketplace and Rewards",
+      "item": [
+        {
+          "name": "Get Marketplace Vouchers - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Is array with mitra', function(){ var j=pm.response.json(); pm.expect(j.data).to.be.an('array'); if(j.data.length>0) pm.expect(j.data[0]).to.have.property('mitra'); });"
                 ],
                 "type": "text/javascript"
               }
@@ -364,45 +2345,57 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/vouchers",
-              "host": ["{{base_url}}"],
-              "path": ["api", "vouchers"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers"
+              ]
             },
-            "description": "Get list of available vouchers from marketplace"
+            "description": "List available vouchers (stock>0, is_active, not expired)"
           },
           "response": []
         },
         {
-          "name": "Claim Voucher",
+          "name": "Get Marketplace Vouchers - Fail (Unauthorized)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Response has success field', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.success).to.be.true;",
-                  "});",
-                  "",
-                  "pm.test('Response has claim data', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('claim_id');",
-                  "    pm.expect(jsonData.data).to.have.property('qr_token');",
-                  "    pm.expect(jsonData.data).to.have.property('voucher_title');",
-                  "    pm.expect(jsonData.data).to.have.property('points_cost');",
-                  "    pm.expect(jsonData.data).to.have.property('remaining_points');",
-                  "});",
-                  "",
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.success) {",
-                  "    pm.collectionVariables.set('claim_id', jsonData.data.claim_id);",
-                  "    pm.collectionVariables.set('qr_token', jsonData.data.qr_token);",
-                  "    console.log('Claim ID saved: ' + jsonData.data.claim_id);",
-                  "    console.log('QR Token saved: ' + jsonData.data.qr_token);",
-                  "}"
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/vouchers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Claim Voucher - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });",
+                  "pm.test('Has qr_token', function(){ pm.expect(pm.response.json().data).to.have.property('qr_token'); });",
+                  "var j=pm.response.json(); if(j.success){ pm.environment.set('claim_id', j.data.claim_id); pm.environment.set('qr_token', j.data.qr_token); }"
                 ],
                 "type": "text/javascript"
               }
@@ -426,48 +2419,204 @@
             },
             "url": {
               "raw": "{{base_url}}/api/vouchers/claim",
-              "host": ["{{base_url}}"],
-              "path": ["api", "vouchers", "claim"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "claim"
+              ]
             },
-            "description": "Claim a voucher using eco points. Make sure user has enough points. Update voucher_id in body before sending."
+            "description": "Claim voucher 1 (needs enough eco_points). Check GET /user/dashboard for remaining_points before. Seeded warga has 380-405 pts, vouchers cost 250-1000."
           },
           "response": []
         },
         {
-          "name": "Get My Vouchers",
+          "name": "Claim Voucher - Validation Fail (Missing voucher_id)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response has success field', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.success).to.be.true;",
-                  "});",
-                  "",
-                  "pm.test('Response has voucher categories', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.data).to.have.property('active');",
-                  "    pm.expect(jsonData.data).to.have.property('used');",
-                  "    pm.expect(jsonData.data).to.have.property('expired');",
-                  "    pm.expect(jsonData.data.active).to.be.an('array');",
-                  "    pm.expect(jsonData.data.used).to.be.an('array');",
-                  "    pm.expect(jsonData.data.expired).to.be.an('array');",
-                  "});",
-                  "",
-                  "pm.test('Each voucher has QR token', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    if (jsonData.data.active.length > 0) {",
-                  "        var voucher = jsonData.data.active[0];",
-                  "        pm.expect(voucher).to.have.property('qr_token');",
-                  "        pm.expect(voucher).to.have.property('voucher');",
-                  "        pm.expect(voucher).to.have.property('mitra');",
-                  "    }",
-                  "});"
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/claim",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "claim"
+              ]
+            },
+            "description": "Missing voucher_id -> 422"
+          },
+          "response": []
+        },
+        {
+          "name": "Claim Voucher - Validation Fail (Invalid ID)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voucher_id\": 9999\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/claim",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "claim"
+              ]
+            },
+            "description": "Non-existent voucher_id -> 422 exists:vouchers,id"
+          },
+          "response": []
+        },
+        {
+          "name": "Claim Voucher - Fail (Insufficient Points)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 500 or 422', function(){ pm.expect([400,422,500].includes(pm.response.code)).to.be.true; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voucher_id\": 3\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/claim",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "claim"
+              ]
+            },
+            "description": "Voucher 3 costs 1000 pts -> likely insufficient for most users -> expect exception message Insufficient eco points"
+          },
+          "response": []
+        },
+        {
+          "name": "Claim Voucher - Fail (Duplicate)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Duplicate should error', function(){ pm.expect([400,422,500].includes(pm.response.code)).to.be.true; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voucher_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/claim",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "claim"
+              ]
+            },
+            "description": "Claim same voucher again with same user -> 'You have already claimed this voucher.' Run after Success case with same auth_token."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Vouchers - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has categories', function(){ var d=pm.response.json().data; pm.expect(d).to.have.property('active'); pm.expect(d).to.have.property('used'); pm.expect(d).to.have.property('expired'); });"
                 ],
                 "type": "text/javascript"
               }
@@ -483,12 +2632,960 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/user/my-vouchers",
-              "host": ["{{base_url}}"],
-              "path": ["api", "user", "my-vouchers"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "my-vouchers"
+              ]
             },
-            "description": "Get user's voucher inventory grouped by status (active, used, expired)"
+            "description": "Grouped active/used/expired with qr_token"
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Merchant",
+      "item": [
+        {
+          "name": "Setup - Login Mitra (seeded kopilokal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "JALANKAN DULU. Mitra seeded verified+active dari VoucherSeeder. Token disimpan ke mitra_token untuk semua request Merchant.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_or_email\": \"kopilokal@example.com\",\n  \"password\": \"SecurePassword123!\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 mitra', function(){ pm.response.to.have.status(200); });",
+                  "var j=pm.response.json(); if(j.success && j.data.token){ pm.environment.set('mitra_token', j.data.token); console.log('mitra_token saved'); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Merchant Dashboard - Success",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mitra_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/merchant/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "merchant",
+                "dashboard"
+              ]
+            },
+            "description": "Task 2: saldo, is_open, can_redeem, stats, recent_disbursements. Butuh mitra verified+active."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Has dashboard fields', function(){ var v=pm.response.json().data; pm.expect(v).to.have.property('store_name'); pm.expect(v).to.have.property('is_open'); pm.expect(v).to.have.property('can_redeem'); pm.expect(v).to.have.property('balance'); pm.expect(v.stats).to.have.property('total_vouchers'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Merchant Dashboard - Fail (Unauthorized)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/merchant/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "merchant",
+                "dashboard"
+              ]
+            },
+            "description": "Tanpa token -> 401."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Merchant Dashboard - Fail (Warga 403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/merchant/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "merchant",
+                "dashboard"
+              ]
+            },
+            "description": "Token warga (role warga) -> 403 Forbidden via EnsureRole. Login dulu sebagai warga untuk isi auth_token."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', function(){ pm.response.to.have.status(403); });",
+                  "pm.test('Envelope', function(){ pm.expect(pm.response.json().success).to.be.false; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch Merchant Status - Toggle Close",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mitra_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/merchant/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "merchant",
+                "status"
+              ]
+            },
+            "description": "Task 2 (ekstra D9): tutup toko. Ganti true untuk buka lagi. Cek ulang via Get Dashboard (is_open berubah).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_open\": false\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Closed', function(){ pm.expect(pm.response.json().data.is_open).to.be.false; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch Merchant Status - Validation Fail",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mitra_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/merchant/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "merchant",
+                "status"
+              ]
+            },
+            "description": "Body kosong -> 422 errors.is_open.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Redeem Voucher - Success (Xendit mock)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Disbursed', function(){ var v=pm.response.json().data; pm.expect(v).to.have.property('xendit_disbursement_id'); pm.expect(v.disbursement_status).to.eql('completed'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mitra_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unique_code\": \"{{qr_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/redeem",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "redeem"
+              ]
+            },
+            "description": "Task 3: kasir scan QR warga. Ambil qr_token dari Marketplace > Claim Voucher (auto-save). Mock Xendit (XENDIT_MOCK=true) langsung completed + saldo mitra += rupiah_value. Sukses lalu lanjutkan Selesai & Scan Lagi."
+          },
+          "response": []
+        },
+        {
+          "name": "Redeem Voucher - Double Redeem (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', function(){ pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mitra_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unique_code\": \"{{qr_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/redeem",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "redeem"
+              ]
+            },
+            "description": "Kirim token yang SAMA seperti Success -> 409 sudah redeemed, saldo tidak double."
+          },
+          "response": []
+        },
+        {
+          "name": "Redeem Voucher - Validation Fail (Unknown Code)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mitra_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unique_code\": \"KBK-NOT-EXIST\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/redeem",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "redeem"
+              ]
+            },
+            "description": "Kode tidak ada -> 422 errors.unique_code."
+          },
+          "response": []
+        },
+        {
+          "name": "Redeem Voucher - Fail (Warga 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', function(){ pm.response.to.have.status(403); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unique_code\": \"{{qr_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vouchers/redeem",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers",
+                "redeem"
+              ]
+            },
+            "description": "Pakai token warga untuk redeem -> 403 (hanya role mitra). Request ini sengaja pakai mitra_token yang ditimpa? Ganti manual header ke {{auth_token}} untuk coba 403."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get Pending Merchants - Success",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/merchants/pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "merchants",
+                "pending"
+              ]
+            },
+            "description": "Task 4: butuh admin_token (Authentication > Login Admin). Otomatis menyimpan pending_mitra_id = id MITRA_PROFILE terbaru (bukan user id)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Paginated pending', function(){ var v=pm.response.json().data; pm.expect(v.data).to.be.an('array'); });",
+                  "var list = pm.response.json().data.data || [];",
+                  "var cand = null;",
+                  "for (var i = list.length - 1; i >= 0; i--) {",
+                  "  if ((list[i].nama_usaha || '').indexOf('Verify') !== -1) { cand = list[i]; break; }",
+                  "}",
+                  "if (!cand && list.length) { cand = list[list.length - 1]; }",
+                  "if (cand) { pm.environment.set('pending_mitra_id', cand.id); console.log('pending_mitra_id auto-saved: ' + cand.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Pending Merchants - Fail (Warga 403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/merchants/pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "merchants",
+                "pending"
+              ]
+            },
+            "description": "Token warga -> 403."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', function(){ pm.response.to.have.status(403); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Merchant - Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/merchants/:id/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "merchants",
+                ":id",
+                "verify"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{pending_mitra_id}}"
+                }
+              ]
+            },
+            "description": "Task 4: set pending_mitra_id = id MITRA_PROFILE (lihat Pending List). Approve -> verified + is_active true. Mitra ini lalu bisa redeem.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"approve\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 approved', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Verified', function(){ pm.expect(pm.response.json().data.verification_status).to.eql('verified'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Merchant - Re-verify (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/merchants/:id/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "merchants",
+                ":id",
+                "verify"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{pending_mitra_id}}"
+                }
+              ]
+            },
+            "description": "Verify id yang SAMA seperti Approve -> 409 sudah direview.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"approve\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', function(){ pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Merchant - Reject (needs fresh pending)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/merchants/:id/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "merchants",
+                ":id",
+                "verify"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{pending_mitra_id}}"
+                }
+              ]
+            },
+            "description": "Untuk coba reject: register mitra fresh lagi (Setup), update pending_mitra_id, lalu jalankan ini -> rejected + is_active false. Reject tanpa reason -> 422.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"reject\",\n  \"reason\": \"Dokumen KTP tidak jelas.\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 409', function(){ pm.expect([200,409]).to.include(pm.response.code); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Donasi",
+      "description": "Donasi via Xendit Invoice untuk pendanaan voucher (CSR/komunitas). JALANKAN BERURUTAN: 1) Admin buat campaign (admin_token) -> 2) Campaign list/detail publik -> 3) Create donation (auth_token, XENDIT_MOCK=true -> invoice_url mock) -> 4) Bayar via invoice_url (real) atau simulasikan webhook PAID -> 5) Admin buat voucher dari dana. Min Rp10.000, invoice 24 jam.",
+      "item": [
+        {
+          "name": "Admin - Create Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/donation-campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "donation-campaigns"
+              ]
+            },
+            "description": "Buat campaign, simpan slug untuk request berikutnya.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"CSR Hijau Q4 2026\",\n  \"description\": \"Dana 500 voucher sembako untuk warga.\",\n  \"target_amount\": 10000000,\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });",
+                  "var j=pm.response.json(); if(j.success){ pm.environment.set('campaign_slug', j.data.slug); pm.environment.set('campaign_id', j.data.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Campaigns - List (Publik)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/donation-campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "donation-campaigns"
+              ]
+            },
+            "description": "Tanpa token, hanya campaign active+terbuka."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Campaign - Detail (Publik)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/donation-campaigns/{{campaign_slug}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "donation-campaigns",
+                "{{campaign_slug}}"
+              ]
+            },
+            "description": "Detail + top donatur + donasi terbaru."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Donate - Create (Invoice)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/donations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "donations"
+              ]
+            },
+            "description": "Min Rp10.000. Response invoice_url dibuka di WebView/browser untuk bayar (QRIS/VA/e-wallet).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaign_id\": {{campaign_id}},\n  \"amount\": 50000,\n  \"payer_name\": \"Hendra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 + invoice_url', function(){ pm.response.to.have.status(201); pm.expect(pm.response.json().data).to.have.property('invoice_url'); });",
+                  "var j=pm.response.json(); if(j.success) pm.environment.set('donation_id', j.data.donation_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Donate - Validation Fail (Below Min)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/donations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "donations"
+              ]
+            },
+            "description": "Di bawah Rp10.000 -> 422.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaign_id\": {{campaign_id}},\n  \"amount\": 5000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422', function(){ pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "My Donations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user/my-donations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "my-donations"
+              ]
+            },
+            "description": "Riwayat + lifetime_total + tier badge."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin - Create Voucher From Funds",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/vouchers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "vouchers"
+              ]
+            },
+            "description": "stock x rupiah_value wajib <= available campaign, else 422. Mitra harus verified+aktif.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaign_id\": {{campaign_id}},\n  \"mitra_profile_id\": 1,\n  \"title\": \"Voucher Sembako CSR\",\n  \"description\": \"Dibiayai donasi CSR Hijau.\",\n  \"points_cost\": 100,\n  \"rupiah_value\": 20000,\n  \"stock\": 10,\n  \"expired_at\": \"2026-12-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function(){ pm.response.to.have.status(201); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     }
