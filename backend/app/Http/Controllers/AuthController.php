@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\LoginRequest;
-use App\Models\MitraProfile;
+use App\Http\Requests\RegisterRequest;
 use App\Models\User;
-use App\Models\WargaProfile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -19,12 +17,14 @@ class AuthController extends Controller
         $validated = $request->validated();
 
         $user = DB::transaction(function () use ($validated) {
+            // Endpoint ini selalu membuat WARGA. Mitra wajib lewat
+            // POST /api/auth/register-mitra (dengan dokumen + verifikasi).
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'phone' => $validated['phone'],
                 'password' => Hash::make($validated['password']),
-                'role' => $validated['role'],
+                'role' => 'warga',
                 'kota' => $validated['city'],
                 'kecamatan' => $validated['district'],
                 'kelurahan' => $validated['sub_district'],
@@ -32,27 +32,12 @@ class AuthController extends Controller
                 'rw' => $validated['rw'],
             ]);
 
-            if ($validated['role'] === 'mitra') {
-                MitraProfile::create([
-                    'user_id' => $user->id,
-                    'nama_usaha' => $validated['nama_usaha'] ?? $validated['name'] . ' Usaha',
-                    'jenis_usaha' => $validated['jenis_usaha'] ?? 'UMKM',
-                    'alamat_usaha' => $validated['alamat_usaha'] ?? $validated['kota'] . ', ' . $validated['district'],
-                    'nama_bank' => $validated['nama_bank'] ?? null,
-                    'nomor_rekening' => $validated['nomor_rekening'] ?? null,
-                    'nama_pemilik_rekening' => $validated['nama_pemilik_rekening'] ?? $validated['name'],
-                    'status_verifikasi' => 'pending',
-                    'is_active' => false,
-                    'balance' => 0,
-                ]);
-            } else {
-                $user->wargaProfile()->create([
-                    'level' => 'Earth Newbie',
-                    'xp' => 0,
-                    'eco_points' => 0,
-                    'streak_days' => 0,
-                ]);
-            }
+            $user->wargaProfile()->create([
+                'level' => 'Earth Newbie',
+                'xp' => 0,
+                'eco_points' => 0,
+                'streak_days' => 0,
+            ]);
 
             return $user;
         });
@@ -85,7 +70,7 @@ class AuthController extends Controller
 
         $credential['password'] = $validated['password'];
 
-        if (!Auth::attempt($credential, false)) {
+        if (! Auth::attempt($credential, false)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid credentials.',
@@ -94,7 +79,7 @@ class AuthController extends Controller
 
         $user = Auth::user();
 
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'Account is deactivated. Please contact support.',

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\SocietyTokenMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,7 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            "auth.society" => SocietyTokenMiddleware::class
+            'auth.society' => SocietyTokenMiddleware::class,
+            'role' => EnsureRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -57,21 +57,21 @@ class UserMissionSeeder extends Seeder
     {
         $user = User::where('email', $email)->first();
 
-        if (!$user) {
+        if (! $user) {
             return;
         }
 
         foreach ($missionList as $data) {
             $mission = $missions->where('title', $data['title'])->first();
 
-            if (!$mission) {
+            if (! $mission) {
                 continue;
             }
 
             UserMission::create([
                 'user_id' => $user->id,
                 'mission_id' => $mission->id,
-                'proof_image_url' => 'seed/proof_' . $user->id . '_' . $mission->id . '.jpg',
+                'proof_image_url' => 'seed/proof_'.$user->id.'_'.$mission->id.'.jpg',
                 'status' => 'verified',
                 'anti_fraud_flagged' => false,
                 'created_at' => now()->subDays($data['days_ago']),

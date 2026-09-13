@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class RegisterRequest extends FormRequest
@@ -20,7 +20,9 @@ class RegisterRequest extends FormRequest
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['required', 'string', 'regex:/^\+[0-9]{10,15}$/', 'unique:users,phone'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', 'string', 'in:warga,mitra'],
+            // Endpoint ini khusus warga. Pendaftaran mitra lewat
+            // POST /api/auth/register-mitra (multipart + dokumen).
+            // Field 'role' kalau dikirim akan diabaikan.
             'city' => ['required', 'string', 'max:255'],
             'district' => ['required', 'string', 'max:255'],
             'sub_district' => ['required', 'string', 'max:255'],
@@ -42,7 +44,6 @@ class RegisterRequest extends FormRequest
             'phone.regex' => 'Phone number must be in international format (e.g. +628123456789).',
             'phone.unique' => 'This phone number is already registered.',
             'email.unique' => 'This email is already registered.',
-            'role.in' => 'Role must be either warga or mitra.',
             'password.confirmed' => 'Password confirmation does not match.',
             'rt.required' => 'RT is required for location mapping.',
             'rw.required' => 'RW is required for location mapping.',

@@ -85,7 +85,7 @@ class LeaderboardController extends Controller
 
         if ($scope === 'rt') {
             $query->where('users.rt', $user->rt)
-                  ->where('users.rw', $user->rw);
+                ->where('users.rw', $user->rw);
         } else {
             $query->where('users.rw', $user->rw);
         }
@@ -96,6 +96,7 @@ class LeaderboardController extends Controller
             ->map(function ($item, $key) {
                 $item->rank = $key + 1;
                 $item->avatar = null;
+
                 return $item;
             });
 
@@ -125,7 +126,7 @@ class LeaderboardController extends Controller
 
         if ($scope === 'rt') {
             $subQuery->where('users.rt', $user->rt)
-                     ->where('users.rw', $user->rw);
+                ->where('users.rw', $user->rw);
         } else {
             $subQuery->where('users.rw', $user->rw);
         }

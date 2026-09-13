@@ -42,4 +42,18 @@ return [
         'mock' => env('GEMINI_MOCK', false),
     ],
 
+    'xendit' => [
+        'key' => env('XENDIT_API_KEY'),
+        'base_url' => env('XENDIT_BASE_URL', 'https://api.xendit.co'),
+        'mock' => env('XENDIT_MOCK', false),
+        'timeout' => env('XENDIT_TIMEOUT', 20),
+        'callback_token' => env('XENDIT_CALLBACK_TOKEN'),
+        'invoice_duration' => env('XENDIT_INVOICE_DURATION', 86400),
+        'success_redirect_url' => env('XENDIT_SUCCESS_REDIRECT_URL'),
+        'failure_redirect_url' => env('XENDIT_FAILURE_REDIRECT_URL'),
+        'webhook_secret' => env('XENDIT_WEBHOOK_SECRET'),
+        'retry_attempts' => env('XENDIT_RETRY_ATTEMPTS', 3),
+        'retry_delay' => env('XENDIT_RETRY_DELAY', 300),
+    ],
+
 ];

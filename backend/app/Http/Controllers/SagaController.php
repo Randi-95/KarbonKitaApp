@@ -58,7 +58,7 @@ class SagaController extends Controller
                 // No attempt today — deterministic 1 random per day (stable)
                 $total = Quiz::whereHas('mission', fn ($q) => $q->where('is_active', true))->count();
                 if ($total > 0) {
-                    $seed = abs(crc32($user->id . '|' . $todayWib));
+                    $seed = abs(crc32($user->id.'|'.$todayWib));
                     $offset = $seed % $total;
                     $quiz = Quiz::with('mission')
                         ->whereHas('mission', fn ($q) => $q->where('is_active', true))
@@ -180,7 +180,7 @@ class SagaController extends Controller
         if ($result['is_correct']) {
             return response()->json([
                 'success' => true,
-                'message' => 'Correct! +' . $result['xp_earned'] . ' XP earned.',
+                'message' => 'Correct! +'.$result['xp_earned'].' XP earned.',
                 'data' => $result,
             ]);
         }

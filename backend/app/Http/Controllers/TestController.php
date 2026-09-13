@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use Illuminate\Http\Request;
 
 class TestController
 {
-    public function index(){
+    public function index()
+    {
         return response()->json([
-            User::get()
+            User::get(),
         ], 200);
     }
 }

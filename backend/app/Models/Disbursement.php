@@ -14,11 +14,19 @@ class Disbursement extends Model
         'mitra_profile_id',
         'voucher_claim_id',
         'xendit_disbursement_id',
+        'payout_id',
+        'reference_id',
         'amount',
         'bank_name',
         'bank_account_number',
         'bank_account_name',
         'status',
+        'raw_status',
+        'currency',
+        'destination_amount',
+        'destination_currency',
+        'failure_code',
+        'estimated_arrival_time',
         'response_log',
         'failure_reason',
     ];
@@ -27,7 +35,9 @@ class Disbursement extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'destination_amount' => 'decimal:2',
             'response_log' => 'array',
+            'estimated_arrival_time' => 'datetime',
         ];
     }
 

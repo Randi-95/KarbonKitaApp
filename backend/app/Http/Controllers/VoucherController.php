@@ -46,7 +46,7 @@ class VoucherController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if (!$voucher) {
+            if (! $voucher) {
                 throw new \Exception('Voucher not found, inactive, out of stock, or expired.');
             }
 
@@ -60,12 +60,12 @@ class VoucherController extends Controller
 
             $profile = WargaProfile::where('user_id', $userId)->lockForUpdate()->first();
 
-            if (!$profile) {
+            if (! $profile) {
                 throw new \Exception('User profile not found.');
             }
 
             if ($profile->eco_points < $voucher->points_cost) {
-                throw new \Exception('Insufficient eco points. You need ' . $voucher->points_cost . ' points.');
+                throw new \Exception('Insufficient eco points. You need '.$voucher->points_cost.' points.');
             }
 
             $qrToken = $this->generateUniqueToken();
@@ -91,7 +91,7 @@ class VoucherController extends Controller
                 'balance_after' => $newBalance,
                 'reference_type' => VoucherClaim::class,
                 'reference_id' => $claim->id,
-                'description' => 'Claimed voucher: ' . $voucher->title,
+                'description' => 'Claimed voucher: '.$voucher->title,
             ]);
 
             return [
@@ -145,7 +145,7 @@ class VoucherController extends Controller
     private function generateUniqueToken(): string
     {
         do {
-            $token = 'KBK-' . strtoupper(Str::random(3)) . '-' . strtoupper(Str::random(3));
+            $token = 'KBK-'.strtoupper(Str::random(3)).'-'.strtoupper(Str::random(3));
         } while (VoucherClaim::where('qr_token', $token)->exists());
 
         return $token;

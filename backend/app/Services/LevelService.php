@@ -56,9 +56,9 @@ class LevelService
             return 'Earth Newbie';
         }
         if ($level <= 6) {
-            return 'Earth Keeper ' . $level;
+            return 'Earth Keeper '.$level;
         }
 
-        return 'Earth Warrior ' . $level;
+        return 'Earth Warrior '.$level;
     }
 }

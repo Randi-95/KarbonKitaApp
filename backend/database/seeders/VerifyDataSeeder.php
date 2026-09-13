@@ -2,11 +2,9 @@
 
 namespace Database\Seeders;
 
-use App\Models\Mission;
 use App\Models\User;
 use App\Models\UserMission;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
 class VerifyDataSeeder extends Seeder
 {
