@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
+import '../../bloc/auth/auth_state.dart';
 import 'register_screen.dart';
-import 'home_screen.dart';
 import 'merchant_dashboard_screen.dart';
 import 'admin_validation_screen.dart';
 
@@ -12,8 +16,33 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  late final TextEditingController _phoneOrEmailController;
+  late final TextEditingController _passwordController;
   bool _obscurePassword = true;
-  bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneOrEmailController = TextEditingController();
+    _passwordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _phoneOrEmailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    FocusScope.of(context).unfocus();
+    context.read<AuthBloc>().add(
+      LoginSubmitted(
+        phoneOrEmail: _phoneOrEmailController.text,
+        password: _passwordController.text,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,116 +185,157 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Phone Field
-                    _buildTextField(
-                      hint: '883-884-889',
-                      icon: Icons.phone_outlined,
-                      keyboardType: TextInputType.phone,
+                    // Bloc-driven error banner (401/403/429/jaringan)
+                    BlocBuilder<AuthBloc, AuthState>(
+                      buildWhen: (prev, curr) =>
+                          prev.message != curr.message ||
+                          prev.status != curr.status,
+                      builder: (context, state) {
+                        if (state.message == null ||
+                            state.status == AuthStatus.loading) {
+                          return const SizedBox.shrink();
+                        }
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDECEA),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Color(0xFFC62828),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  state.message!,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFFC62828),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(height: 16),
 
-                    // Email Field
-                    _buildTextField(
-                      hint: 'user@email.com',
-                      icon: Icons.email_outlined,
-                      keyboardType: TextInputType.emailAddress,
+                    // Single field: No HP atau Email
+                    BlocSelector<AuthBloc, AuthState, String?>(
+                      selector: (state) {
+                        final list = state.fieldErrors['phone_or_email'];
+                        return (list != null && list.isNotEmpty)
+                            ? list.first
+                            : null;
+                      },
+                      builder: (context, fieldError) {
+                        return _buildTextField(
+                          hint: 'No HP (+628...) atau Email',
+                          helper: 'Bisa nomor HP format +62 atau alamat email',
+                          icon: Icons.person_outline,
+                          controller: _phoneOrEmailController,
+                          keyboardType: TextInputType.emailAddress,
+                          errorText: fieldError,
+                          onSubmitted: (_) => _submit(),
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
 
                     // Password Field
-                    _buildTextField(
-                      hint: '********',
-                      icon: Icons.lock_outline,
-                      isPassword: true,
-                      obscureText: _obscurePassword,
-                      onTogglePassword: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
+                    BlocSelector<AuthBloc, AuthState, String?>(
+                      selector: (state) {
+                        final list = state.fieldErrors['password'];
+                        return (list != null && list.isNotEmpty)
+                            ? list.first
+                            : null;
+                      },
+                      builder: (context, fieldError) {
+                        return _buildTextField(
+                          hint: 'Kata sandi',
+                          icon: Icons.lock_outline,
+                          isPassword: true,
+                          obscureText: _obscurePassword,
+                          controller: _passwordController,
+                          errorText: fieldError,
+                          onSubmitted: (_) => _submit(),
+                          onTogglePassword: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        );
                       },
                     ),
                     const SizedBox(height: 16),
 
-                    // Remember Me and Forgot Password
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: Checkbox(
-                                value: _rememberMe,
-                                activeColor: const Color(0xFF1B8039),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                onChanged: (val) {
-                                  setState(() {
-                                    _rememberMe = val ?? false;
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Ingat saya',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
+                    // Forgot Password (token permanen sampai logout,
+                    // jadi tidak ada lagi checkbox "Ingat saya")
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        TextButton(
-                          style: TextButton.styleFrom(
-                            minimumSize: Size.zero,
-                            padding: EdgeInsets.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          onPressed: () {
-                            // Lupa kata sandi action
-                          },
-                          child: const Text(
-                            'Lupa kata sandi?',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF1B8039),
-                              fontWeight: FontWeight.w600,
-                            ),
+                        onPressed: () {
+                          // Lupa kata sandi action
+                        },
+                        child: const Text(
+                          'Lupa kata sandi?',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF1B8039),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 32),
 
                     // Submit Button
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const HomeScreen(),
+                    BlocBuilder<AuthBloc, AuthState>(
+                      buildWhen: (prev, curr) => prev.status != curr.status,
+                      builder: (context, state) {
+                        final loading = state.status == AuthStatus.loading;
+                        return ElevatedButton(
+                          onPressed: loading ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1B8039),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            elevation: 0,
                           ),
+                          child: loading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'Masuk',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         );
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1B8039),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(100),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Masuk',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
                     ),
                     const SizedBox(height: 20),
                     Divider(color: Colors.grey.shade200, thickness: 1),
@@ -388,40 +458,75 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildTextField({
     required String hint,
     required IconData icon,
+    TextEditingController? controller,
+    String? helper,
+    String? errorText,
     bool isPassword = false,
     bool obscureText = false,
     VoidCallback? onTogglePassword,
     TextInputType? keyboardType,
+    void Function(String)? onSubmitted,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: TextField(
-        obscureText: obscureText,
-        keyboardType: keyboardType,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade400),
-          prefixIcon: Icon(icon, color: Colors.grey.shade600, size: 20),
-          suffixIcon: isPassword
-              ? IconButton(
-                  icon: Icon(
-                    obscureText
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    color: Colors.grey.shade600,
-                    size: 20,
-                  ),
-                  onPressed: onTogglePassword,
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: errorText != null
+                  ? const Color(0xFFC62828)
+                  : Colors.grey.shade300,
+            ),
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            textInputAction: isPassword
+                ? TextInputAction.done
+                : TextInputAction.next,
+            onSubmitted: onSubmitted,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(color: Colors.grey.shade400),
+              prefixIcon: Icon(icon, color: Colors.grey.shade600, size: 20),
+              suffixIcon: isPassword
+                  ? IconButton(
+                      icon: Icon(
+                        obscureText
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: Colors.grey.shade600,
+                        size: 20,
+                      ),
+                      onPressed: onTogglePassword,
+                    )
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+          ),
         ),
-      ),
+        if (helper != null && errorText == null)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 6),
+            child: Text(
+              helper,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 6),
+            child: Text(
+              errorText,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFC62828)),
+            ),
+          ),
+      ],
     );
   }
 }
