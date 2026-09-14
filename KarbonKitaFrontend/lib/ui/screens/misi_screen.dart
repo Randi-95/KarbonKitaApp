@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../bloc/mission/mission_bloc.dart';
+import '../../bloc/mission/mission_event.dart';
+import '../../bloc/mission/mission_state.dart';
+import '../../models/mission.dart';
 import 'misi_scan_screen.dart';
 import 'mobility_tracker_screen.dart';
 
-class MisiScreen extends StatefulWidget {
+class MisiScreen extends StatelessWidget {
   const MisiScreen({super.key});
 
   @override
-  State<MisiScreen> createState() => _MisiScreenState();
-}
-
-class _MisiScreenState extends State<MisiScreen> {
-  int _selectedCategoryIndex = 0;
-
-  @override
   Widget build(BuildContext context) {
+    // Trigger initial load when screen is built
+    context.read<MissionBloc>().add(const MissionsLoaded());
+    context.read<MissionBloc>().add(const QuizzesLoaded());
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FA),
       body: SafeArea(
@@ -132,38 +134,78 @@ class _MisiScreenState extends State<MisiScreen> {
   }
 
   Widget _buildCategoryTabs() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+    return BlocBuilder<MissionBloc, MissionState>(
+      buildWhen: (prev, curr) => prev.currentFilter != curr.currentFilter,
+      builder: (context, state) {
+        int selectedIndex = _categoryToIndex(state.currentFilter);
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildTabItem(0, Icons.grid_view_rounded, 'Semua'),
-          _buildTabItem(1, Icons.pedal_bike, 'Mobilitas'),
-          _buildTabItem(2, Icons.recycling, 'Sampah'),
-          _buildTabItem(3, Icons.help_outline, 'Kuis'),
-        ],
-      ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildTabItem(0, Icons.grid_view_rounded, 'Semua', selectedIndex, context),
+              _buildTabItem(1, Icons.pedal_bike, 'Mobilitas', selectedIndex, context),
+              _buildTabItem(2, Icons.recycling, 'Sampah', selectedIndex, context),
+              _buildTabItem(3, Icons.help_outline, 'Kuis', selectedIndex, context),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildTabItem(int index, IconData icon, String label) {
-    bool isSelected = _selectedCategoryIndex == index;
+  int _categoryToIndex(String? category) {
+    switch (category) {
+      case null:
+        return 0;
+      case 'mobility':
+        return 1;
+      case 'waste':
+        return 2;
+      case 'quiz':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  String? _indexToCategory(int index) {
+    switch (index) {
+      case 0:
+        return null;
+      case 1:
+        return 'mobility';
+      case 2:
+        return 'waste';
+      case 3:
+        return 'quiz';
+      default:
+        return null;
+    }
+  }
+
+  Widget _buildTabItem(
+    int index,
+    IconData icon,
+    String label,
+    int selectedIndex,
+    BuildContext context,
+  ) {
+    bool isSelected = selectedIndex == index;
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _selectedCategoryIndex = index;
-        });
+        context.read<MissionBloc>().add(MissionsFiltered(_indexToCategory(index)));
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -193,88 +235,188 @@ class _MisiScreenState extends State<MisiScreen> {
   }
 
   Widget _buildMissionList() {
-    return Column(
-      children: [
-        _buildMissionCard(
-          icon: Icons.pedal_bike,
-          iconBgColor: const Color(0xFFE8F5E9),
-          iconColor: Colors.green,
-          categoryIcon: Icons.pedal_bike,
-          categoryLabel: 'Mobilitas',
-          categoryColor: Colors.green,
-          title: 'Pejuang Pedal 2Km',
-          description: 'catat aktivitasmu dan dapatkan point!',
-          points: '+150',
-          buttonText: 'Mulai Tracker',
-          buttonColor: Colors.green,
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const MobilityTrackerScreen(
-                  missionTitle: 'Pejuang Pedal 2Km',
-                  activityType: 'cycling',
-                ),
-              ),
+    return BlocBuilder<MissionBloc, MissionState>(
+      buildWhen: (prev, curr) =>
+          prev.status != curr.status ||
+          prev.filteredMissions != curr.filteredMissions ||
+          prev.errorMessage != curr.errorMessage,
+      builder: (context, state) {
+        if (state.status == MissionStatus.loading) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(color: Color(0xFF1B8039)),
+            ),
+          );
+        }
+
+        if (state.status == MissionStatus.error) {
+          return _buildErrorState(state.errorMessage ?? 'Terjadi kesalahan', context);
+        }
+
+        if (state.filteredMissions.isEmpty) {
+          return _buildEmptyState(state.currentFilter);
+        }
+
+        return Column(
+          children: state.filteredMissions.map((mission) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 15),
+              child: _buildMissionCard(mission, context),
             );
-          },
-        ),
-        const SizedBox(height: 15),
-        _buildMissionCard(
-          icon: Icons.delete_outline,
-          iconBgColor: const Color(0xFFE8F5E9),
-          iconColor: Colors.green,
-          categoryIcon: Icons.recycling,
-          categoryLabel: 'Sampah',
-          categoryColor: Colors.green,
-          title: 'Pahlawan Plastik Terpilah',
-          description: 'Ambil foto hasil pilah sampahmu!',
-          points: '+300',
-          buttonText: 'Upload Foto',
-          buttonColor: Colors.green,
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const MisiScanScreen(
-                  missionTitle: 'Pahlawan Plastik Terpilah',
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 15),
-        _buildMissionCard(
-          icon: Icons.help_outline,
-          iconBgColor: const Color(0xFFFFF3E0),
-          iconColor: Colors.orange,
-          categoryIcon: Icons.pedal_bike,
-          categoryLabel: 'Mobilitas',
-          categoryColor: Colors.orange,
-          title: 'Petualangan Kuis Hijau',
-          description: 'Kerjakan kuis harian untuk tetap mempertahankan Streak',
-          points: '+30',
-          buttonText: 'Mulai Quiz',
-          buttonColor: Colors.orange,
-        ),
-      ],
+          }).toList(),
+        );
+      },
     );
   }
 
-  Widget _buildMissionCard({
-    required IconData icon,
-    required Color iconBgColor,
-    required Color iconColor,
-    required IconData categoryIcon,
-    required String categoryLabel,
-    required Color categoryColor,
-    required String title,
-    required String description,
-    required String points,
-    required String buttonText,
-    required Color buttonColor,
-    VoidCallback? onPressed,
-  }) {
+  Widget _buildErrorState(String message, BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            color: Color(0xFFC62828),
+            size: 48,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Color(0xFFC62828)),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              context.read<MissionBloc>().add(const MissionsLoaded());
+              context.read<MissionBloc>().add(const QuizzesLoaded());
+            },
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Coba Lagi'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B8039),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String? filter) {
+    String message;
+    IconData icon;
+
+    switch (filter) {
+      case 'mobility':
+        message = 'Belum ada misi mobilitas aktif';
+        icon = Icons.pedal_bike;
+        break;
+      case 'waste':
+        message = 'Belum ada misi sampah aktif';
+        icon = Icons.recycling;
+        break;
+      case 'quiz':
+        message = 'Belum ada kuis harian tersedia';
+        icon = Icons.help_outline;
+        break;
+      default:
+        message = 'Belum ada misi aktif';
+        icon = Icons.assignment;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.grey[400], size: 48),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMissionCard(Mission mission, BuildContext context) {
+    // Determine button action based on category
+    VoidCallback? onPressed;
+    String buttonText;
+    Color buttonColor = mission.categoryColor;
+
+    if (mission.category == 'mobility') {
+      buttonText = 'Mulai Tracker';
+      onPressed = () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MobilityTrackerScreen(
+              missionTitle: mission.title,
+              activityType: _getActivityTypeFromTitle(mission.title),
+              missionId: mission.id,
+            ),
+          ),
+        );
+      };
+    } else if (mission.category == 'waste') {
+      buttonText = 'Upload Foto';
+      onPressed = () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MisiScanScreen(
+              missionTitle: mission.title,
+              missionId: mission.id,
+            ),
+          ),
+        );
+      };
+    } else if (mission.category == 'quiz') {
+      buttonText = 'Mulai Quiz';
+      onPressed = () {
+        // TODO: Navigate to quiz screen with missionId
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Quiz: ${mission.title} - Coming soon')),
+        );
+      };
+    } else {
+      buttonText = 'Mulai';
+      onPressed = null;
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -299,10 +441,10 @@ class _MisiScreenState extends State<MisiScreen> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: iconBgColor,
+                  color: mission.iconBgColor,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: iconColor, size: 30),
+                child: Icon(mission.categoryIcon, color: mission.categoryColor, size: 30),
               ),
               const SizedBox(width: 12),
               // Middle Content
@@ -316,19 +458,19 @@ class _MisiScreenState extends State<MisiScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: categoryColor.withOpacity(0.1),
+                        color: mission.categoryColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(categoryIcon, color: categoryColor, size: 12),
+                          Icon(mission.categoryIcon, color: mission.categoryColor, size: 12),
                           const SizedBox(width: 4),
                           Text(
-                            categoryLabel,
+                            mission.categoryLabel,
                             style: TextStyle(
                               fontSize: 10,
-                              color: categoryColor,
+                              color: mission.categoryColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -337,7 +479,7 @@ class _MisiScreenState extends State<MisiScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      title,
+                      mission.title,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -347,7 +489,7 @@ class _MisiScreenState extends State<MisiScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      description,
+                      mission.description,
                       style: const TextStyle(
                         fontSize: 10,
                         color: Colors.black54,
@@ -385,7 +527,7 @@ class _MisiScreenState extends State<MisiScreen> {
                     Column(
                       children: [
                         Text(
-                          points,
+                          '+${mission.pointsReward}',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -429,5 +571,13 @@ class _MisiScreenState extends State<MisiScreen> {
         ],
       ),
     );
+  }
+
+  String _getActivityTypeFromTitle(String title) {
+    final lower = title.toLowerCase();
+    if (lower.contains('sepeda') || lower.contains('cycling') || lower.contains('pedal')) {
+      return 'cycling';
+    }
+    return 'walking';
   }
 }

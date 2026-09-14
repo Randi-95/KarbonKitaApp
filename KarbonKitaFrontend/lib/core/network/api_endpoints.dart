@@ -8,9 +8,25 @@ class ApiEndpoints {
     defaultValue: 'http://localhost:8000/api',
   );
 
+  // Auth
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
   static const String me = '/user';
+
+  // Missions
+  static const String missionsActive = '/missions/active';
+  static const String verifyWaste = '/missions/verify-waste';
+  static const String mobilitySync = '/missions/mobility-sync';
+
+  // Saga (Quiz)
+  static const String sagaQuizzes = '/saga/quizzes';
+  static const String sagaAnswer = '/saga/answer';
+
+  // Marketplace (Voucher)
+  static const String vouchers = '/vouchers';
+
+  // Dashboard (saldo eco_points)
+  static const String userDashboard = '/user/dashboard';
 
   static String url(String path) => '$baseUrl$path';
 }

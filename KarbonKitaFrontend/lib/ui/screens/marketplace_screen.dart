@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../bloc/voucher/voucher_bloc.dart';
+import '../../bloc/voucher/voucher_event.dart';
+import '../../bloc/voucher/voucher_state.dart';
+import '../../models/voucher.dart';
 import 'dompet_voucher_screen.dart';
 
 class MarketplaceScreen extends StatefulWidget {
@@ -10,6 +16,25 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   int _selectedCategoryIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<VoucherBloc>().add(const VouchersLoaded());
+  }
+
+  /// Format angka ala Indonesia: 1250 -> "1.250".
+  String _formatPoints(int value) {
+    final digits = value.toString();
+    final buffer = StringBuffer();
+    var count = 0;
+    for (var i = digits.length - 1; i >= 0; i--) {
+      buffer.write(digits[i]);
+      count++;
+      if (count % 3 == 0 && i != 0) buffer.write('.');
+    }
+    return buffer.toString().split('').reversed.join();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,13 +118,28 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   'Poin: ',
                   style: TextStyle(fontSize: 14, color: Colors.black87),
                 ),
-                const Text(
-                  '1.250',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
+                BlocBuilder<VoucherBloc, VoucherState>(
+                  buildWhen: (prev, curr) =>
+                      prev.ecoPoints != curr.ecoPoints ||
+                      prev.status != curr.status,
+                  builder: (context, state) {
+                    if (state.status == VoucherStatus.loading &&
+                        state.ecoPoints == null) {
+                      return const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      );
+                    }
+                    return Text(
+                      _formatPoints(state.ecoPoints ?? 0),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -130,11 +170,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Widget _buildCategoryChips() {
-    final categories = [
+    // Backend voucher tidak punya field kategori — semua item adalah
+    // voucher UMKM, jadi kedua chip menampilkan data yang sama.
+    const categories = [
       {'label': 'Semua', 'icon': Icons.eco},
       {'label': 'Voucher UMKM', 'icon': Icons.storefront},
-      {'label': 'Donasi Pohon', 'icon': Icons.park},
-      {'label': 'Produk', 'icon': Icons.shopping_bag_outlined},
     ];
 
     return SingleChildScrollView(
@@ -231,58 +271,122 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Widget _buildProductsGrid() {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 15,
-      mainAxisSpacing: 15,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 0.62,
-      children: [
-        _buildProductCard(
-          imageUrl: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=400&q=80',
-          storeName: 'Kopi Lokal',
-          category: 'Minuman',
-          isUmkm: true,
-          title: 'Voucher Rp 20.000',
-          points: '500',
-        ),
-        _buildProductCard(
-          imageUrl: 'https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?w=400&q=80',
-          storeName: 'LindungiHutan',
-          category: 'Donasi',
-          isUmkm: true,
-          title: 'Donasi 1 Bibit Mangrove',
-          points: '1000',
-        ),
-        _buildProductCard(
-          imageUrl: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80',
-          storeName: 'Dapur Sehat Ibu',
-          category: 'Makanan',
-          isUmkm: true,
-          title: 'Voucher Nasi Ayam',
-          points: '750',
-        ),
-        _buildProductCard(
-          imageUrl: 'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=400&q=80',
-          storeName: 'Kopi Lokal',
-          category: 'Minuman',
-          isUmkm: true,
-          title: 'Es Kopi Susu Aren',
-          points: '300',
-        ),
-      ],
+    return BlocBuilder<VoucherBloc, VoucherState>(
+      buildWhen: (prev, curr) =>
+          prev.status != curr.status || prev.vouchers != curr.vouchers,
+      builder: (context, state) {
+        if (state.status == VoucherStatus.loading ||
+            state.status == VoucherStatus.initial) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(color: Color(0xFF1B8039)),
+            ),
+          );
+        }
+
+        if (state.status == VoucherStatus.error) {
+          return _buildErrorState(
+            state.errorMessage ?? 'Terjadi kesalahan',
+          );
+        }
+
+        if (state.vouchers.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        return GridView.count(
+          crossAxisCount: 2,
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 0.62,
+          children:
+              state.vouchers.map((voucher) => _buildProductCard(voucher)).toList(),
+        );
+      },
     );
   }
 
-  Widget _buildProductCard({
-    required String imageUrl,
-    required String storeName,
-    required String category,
-    required bool isUmkm,
-    required String title,
-    required String points,
-  }) {
+  Widget _buildErrorState(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, color: Color(0xFFC62828), size: 48),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Color(0xFFC62828)),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              context.read<VoucherBloc>().add(const VouchersLoaded());
+            },
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Coba Lagi'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B8039),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.storefront_outlined, color: Colors.grey[400], size: 48),
+          const SizedBox(height: 12),
+          Text(
+            'Belum ada voucher tersedia',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCard(Voucher voucher) {
+    final storeName = voucher.mitra.displayName;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -302,15 +406,20 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             flex: 5,
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-              child: Image.network(
-                imageUrl,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(child: Icon(Icons.image, color: Colors.grey)),
-                ),
-              ),
+              child: voucher.imageUrl.isNotEmpty
+                  ? Image.network(
+                      voucher.imageUrl,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey.shade200,
+                        child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+                      ),
+                    )
+                  : Container(
+                      color: Colors.grey.shade200,
+                      child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+                    ),
             ),
           ),
           Expanded(
@@ -327,7 +436,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         radius: 10,
                         backgroundColor: Colors.brown.shade100,
                         child: Text(
-                          storeName[0],
+                          storeName.isNotEmpty ? storeName[0].toUpperCase() : '-',
                           style: TextStyle(fontSize: 10, color: Colors.brown.shade800, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -344,16 +453,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             ),
                             Row(
                               children: [
-                                Text(
-                                  category,
-                                  style: const TextStyle(fontSize: 8, color: Colors.grey),
-                                ),
-                                if (isUmkm) ...[
-                                  const SizedBox(width: 4),
-                                  Image.asset('assets/images/ecopoints.png', width: 12, height: 12, errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Colors.green, size: 12)),
-                                  const SizedBox(width: 2),
-                                  const Text('UMKM', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                                ]
+                                Image.asset('assets/images/ecopoints.png', width: 12, height: 12, errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Colors.green, size: 12)),
+                                const SizedBox(width: 2),
+                                const Text('UMKM', style: TextStyle(fontSize: 8, color: Colors.grey)),
                               ],
                             ),
                           ],
@@ -362,7 +464,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     ],
                   ),
                   Text(
-                    title,
+                    voucher.title,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -375,10 +477,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {},
+                      // Tampilan saja: klaim voucher belum diimplementasikan.
+                      onPressed: null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFE8F5E9),
                         foregroundColor: const Color(0xFF1B8039),
+                        disabledBackgroundColor: const Color(0xFFE8F5E9),
+                        disabledForegroundColor: const Color(0xFF1B8039),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -394,7 +499,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             Image.asset('assets/images/ecopoints.png', width: 14, height: 14, errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Color(0xFF1B8039), size: 14)),
                             const SizedBox(width: 4),
                             Text(
-                              'Tukar $points Poin',
+                              'Tukar ${_formatPoints(voucher.pointsCost)} Poin',
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,

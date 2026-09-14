@@ -10,9 +10,10 @@ import '../widgets/mission_scan/validation_result_sheet.dart';
 /// Foto hasil [takePicture] hanya disimpan lokal sementara dan TIDAK
 /// diupload — validasi Gemini berjalan server-side (di luar scope file ini).
 class MisiScanScreen extends StatefulWidget {
-  const MisiScanScreen({super.key, this.missionTitle = 'Misi Sampah'});
+  const MisiScanScreen({super.key, this.missionTitle = 'Misi Sampah', this.missionId});
 
   final String missionTitle;
+  final int? missionId;
 
   @override
   State<MisiScanScreen> createState() => _MisiScanScreenState();

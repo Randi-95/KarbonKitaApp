@@ -25,10 +25,12 @@ class MobilityTrackerScreen extends StatefulWidget {
     super.key,
     this.missionTitle = 'Pejuang Pedal 2Km',
     this.activityType = 'cycling',
+    this.missionId,
   });
 
   final String missionTitle;
   final String activityType;
+  final int? missionId;
 
   @override
   State<MobilityTrackerScreen> createState() => _MobilityTrackerScreenState();
