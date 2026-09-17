@@ -7,6 +7,7 @@ import '../../bloc/mission/mission_state.dart';
 import '../../models/mission.dart';
 import 'misi_scan_screen.dart';
 import 'mobility_tracker_screen.dart';
+import 'quiz_level_screen.dart';
 
 class MisiScreen extends StatelessWidget {
   const MisiScreen({super.key});
@@ -154,10 +155,34 @@ class MisiScreen extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildTabItem(0, Icons.grid_view_rounded, 'Semua', selectedIndex, context),
-              _buildTabItem(1, Icons.pedal_bike, 'Mobilitas', selectedIndex, context),
-              _buildTabItem(2, Icons.recycling, 'Sampah', selectedIndex, context),
-              _buildTabItem(3, Icons.help_outline, 'Kuis', selectedIndex, context),
+              _buildTabItem(
+                0,
+                Icons.grid_view_rounded,
+                'Semua',
+                selectedIndex,
+                context,
+              ),
+              _buildTabItem(
+                1,
+                Icons.pedal_bike,
+                'Mobilitas',
+                selectedIndex,
+                context,
+              ),
+              _buildTabItem(
+                2,
+                Icons.recycling,
+                'Sampah',
+                selectedIndex,
+                context,
+              ),
+              _buildTabItem(
+                3,
+                Icons.help_outline,
+                'Kuis',
+                selectedIndex,
+                context,
+              ),
             ],
           ),
         );
@@ -205,7 +230,9 @@ class MisiScreen extends StatelessWidget {
     bool isSelected = selectedIndex == index;
     return GestureDetector(
       onTap: () {
-        context.read<MissionBloc>().add(MissionsFiltered(_indexToCategory(index)));
+        context.read<MissionBloc>().add(
+          MissionsFiltered(_indexToCategory(index)),
+        );
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -251,7 +278,10 @@ class MisiScreen extends StatelessWidget {
         }
 
         if (state.status == MissionStatus.error) {
-          return _buildErrorState(state.errorMessage ?? 'Terjadi kesalahan', context);
+          return _buildErrorState(
+            state.errorMessage ?? 'Terjadi kesalahan',
+            context,
+          );
         }
 
         if (state.filteredMissions.isEmpty) {
@@ -288,11 +318,7 @@ class MisiScreen extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.error_outline,
-            color: Color(0xFFC62828),
-            size: 48,
-          ),
+          const Icon(Icons.error_outline, color: Color(0xFFC62828), size: 48),
           const SizedBox(height: 12),
           Text(
             message,
@@ -407,9 +433,9 @@ class MisiScreen extends StatelessWidget {
     } else if (mission.category == 'quiz') {
       buttonText = 'Mulai Quiz';
       onPressed = () {
-        // TODO: Navigate to quiz screen with missionId
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Quiz: ${mission.title} - Coming soon')),
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const QuizLevelScreen()),
         );
       };
     } else {
@@ -444,7 +470,11 @@ class MisiScreen extends StatelessWidget {
                   color: mission.iconBgColor,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(mission.categoryIcon, color: mission.categoryColor, size: 30),
+                child: Icon(
+                  mission.categoryIcon,
+                  color: mission.categoryColor,
+                  size: 30,
+                ),
               ),
               const SizedBox(width: 12),
               // Middle Content
@@ -464,7 +494,11 @@ class MisiScreen extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(mission.categoryIcon, color: mission.categoryColor, size: 12),
+                          Icon(
+                            mission.categoryIcon,
+                            color: mission.categoryColor,
+                            size: 12,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             mission.categoryLabel,
@@ -575,7 +609,9 @@ class MisiScreen extends StatelessWidget {
 
   String _getActivityTypeFromTitle(String title) {
     final lower = title.toLowerCase();
-    if (lower.contains('sepeda') || lower.contains('cycling') || lower.contains('pedal')) {
+    if (lower.contains('sepeda') ||
+        lower.contains('cycling') ||
+        lower.contains('pedal')) {
       return 'cycling';
     }
     return 'walking';

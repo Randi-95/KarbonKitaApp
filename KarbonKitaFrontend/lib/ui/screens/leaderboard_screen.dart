@@ -1,4 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
+import '../../bloc/leaderboard/leaderboard_bloc.dart';
+import '../../bloc/leaderboard/leaderboard_event.dart';
+import '../../bloc/leaderboard/leaderboard_state.dart';
+import '../../models/dashboard.dart';
+import '../../models/leaderboard.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -9,38 +18,173 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   int _selectedTab = 0; // 0 = Minggu Ini, 1 = Bulan Ini
-  int _selectedCategory = 0; // 0 = Individu Warga, 1 = Antar RT/RW
+  int _selectedCategory = 0; // 0 = Individu se-RT, 1 = Individu se-RW
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<LeaderboardBloc>().add(
+          LeaderboardLoaded(scope: _scope, timeframe: _timeframe),
+        );
+      }
+    });
+  }
+
+  LeaderboardScope get _scope =>
+      _selectedCategory == 0 ? LeaderboardScope.rt : LeaderboardScope.rw;
+
+  LeaderboardTimeframe get _timeframe => _selectedTab == 0
+      ? LeaderboardTimeframe.weekly
+      : LeaderboardTimeframe.monthly;
+
+  void _onTabChanged(int tab) {
+    if (_selectedTab == tab) return;
+    setState(() => _selectedTab = tab);
+    context.read<LeaderboardBloc>().add(
+      LeaderboardLoaded(scope: _scope, timeframe: _timeframe),
+    );
+  }
+
+  void _onCategoryChanged(int category) {
+    if (_selectedCategory == category) return;
+    setState(() => _selectedCategory = category);
+    context.read<LeaderboardBloc>().add(
+      LeaderboardLoaded(scope: _scope, timeframe: _timeframe),
+    );
+  }
+
+  Future<void> _onRefresh() async {
+    final bloc = context.read<LeaderboardBloc>();
+    final wait = bloc.stream.firstWhere(
+      (s) => s.status != LeaderboardStatus.loading || s.board != null,
+    );
+    bloc.add(const LeaderboardRefreshed());
+    await wait;
+  }
+
+  /// Format ribuan gaya Indonesia (3450 -> "3.450").
+  String _formatXp(int value) {
+    final digits = value.toString();
+    final buffer = StringBuffer();
+    var count = 0;
+    for (var i = digits.length - 1; i >= 0; i--) {
+      buffer.write(digits[i]);
+      count++;
+      if (count % 3 == 0 && i != 0) buffer.write('.');
+    }
+    return buffer.toString().split('').reversed.join();
+  }
+
+  String _rtLabel(LeaderboardPreview e) => 'RT ${e.rt} / RW ${e.rw}';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+      body: BlocListener<LeaderboardBloc, LeaderboardState>(
+        // Token mati → logout global, SessionGate pindah ke Login.
+        listenWhen: (prev, curr) => !prev.isUnauthorized && curr.isUnauthorized,
+        listener: (context, state) {
+          context.read<AuthBloc>().add(const LoggedOut());
+        },
+        child: BlocBuilder<LeaderboardBloc, LeaderboardState>(
+          builder: (context, state) {
+            final board = state.board;
+            final isLoading =
+                state.status == LeaderboardStatus.loading && board == null;
+
+            if (state.status == LeaderboardStatus.error && board == null) {
+              return SafeArea(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 16),
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    _buildTabToggle(),
-                    const SizedBox(height: 16),
-                    _buildCategoryToggle(),
-                    const SizedBox(height: 20),
-                    _buildTop3Podium(),
-                    const SizedBox(height: 20),
-                    _buildRankingList(),
-                    const SizedBox(height: 80),
+                    Expanded(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.cloud_off,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                state.errorMessage ??
+                                    'Gagal memuat leaderboard.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton(
+                                onPressed: () => context
+                                    .read<LeaderboardBloc>()
+                                    .add(const LeaderboardRefreshed()),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF43A047),
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Coba Lagi'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
+              );
+            }
+
+            final rankings = board?.rankings ?? const [];
+            return SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _onRefresh,
+                      color: const Color(0xFF43A047),
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 16),
+                            _buildHeader(),
+                            const SizedBox(height: 20),
+                            _buildTabToggle(),
+                            const SizedBox(height: 16),
+                            _buildCategoryToggle(),
+                            const SizedBox(height: 20),
+                            if (isLoading)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 48),
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFF43A047),
+                                  ),
+                                ),
+                              )
+                            else ...[
+                              _buildTop3Podium(rankings),
+                              const SizedBox(height: 20),
+                              _buildRankingList(rankings),
+                              const SizedBox(height: 80),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  _buildBottomCurrentUser(board?.currentUser),
+                ],
               ),
-            ),
-            _buildBottomCurrentUser(),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -100,7 +244,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _selectedTab = 0),
+              onTap: () => _onTabChanged(0),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
@@ -121,7 +265,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ),
           Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _selectedTab = 1),
+              onTap: () => _onTabChanged(1),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
@@ -163,7 +307,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _selectedCategory = 0),
+              onTap: () => _onCategoryChanged(0),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
@@ -188,7 +332,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Individu Warga',
+                      'Individu RT',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -204,7 +348,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ),
           Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _selectedCategory = 1),
+              onTap: () => _onCategoryChanged(1),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
@@ -229,7 +373,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Antar RT/RW',
+                      'Individu RW',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -248,57 +392,92 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  Widget _buildTop3Podium() {
+  Widget _buildTop3Podium(List<LeaderboardPreview> rankings) {
+    if (rankings.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: const Text(
+          'Belum ada peringkat periode ini.\nSelesaikan misi untuk masuk papan!',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12, color: Colors.black54),
+        ),
+      );
+    }
+    LeaderboardPreview? byRank(int rank) {
+      for (final e in rankings) {
+        if (e.rank == rank) return e;
+      }
+      return null;
+    }
+
+    Widget stepFor(
+      LeaderboardPreview? e, {
+      required double stepHeight,
+      required Color stepColor,
+      required Color badgeColor,
+      required Color avatarBg,
+      required Color avatarIcon,
+      bool isTop1 = false,
+      int flex = 1,
+    }) {
+      if (e == null) return Expanded(flex: flex, child: const SizedBox());
+      return Expanded(
+        flex: flex,
+        child: _buildPodiumStep(
+          rank: e.rank,
+          name: e.name,
+          rt: _rtLabel(e),
+          points: _formatXp(e.xp),
+          stepHeight: stepHeight,
+          stepColor: stepColor,
+          badgeColor: badgeColor,
+          avatarBg: avatarBg,
+          avatarIcon: avatarIcon,
+          isTop1: isTop1,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // 2nd place
-          Expanded(
-            child: _buildPodiumStep(
-              rank: 2,
-              name: 'Alya Nabila',
-              rt: 'RT 05 / RW 02',
-              points: '2.890',
-              stepHeight: 70,
-              stepColor: Colors.blueGrey,
-              badgeColor: Colors.blueGrey,
-              avatarBg: Colors.blueGrey.shade100,
-              avatarIcon: Colors.blueGrey,
-            ),
+          stepFor(
+            byRank(2),
+            stepHeight: 70,
+            stepColor: Colors.blueGrey,
+            badgeColor: Colors.blueGrey,
+            avatarBg: Colors.blueGrey.shade100,
+            avatarIcon: Colors.blueGrey,
           ),
           const SizedBox(width: 8),
           // 1st place (center, tallest)
-          Expanded(
+          stepFor(
+            byRank(1),
+            stepHeight: 100,
+            stepColor: Colors.amber,
+            badgeColor: Colors.amber,
+            avatarBg: const Color(0xFFFFF8E1),
+            avatarIcon: Colors.amber,
+            isTop1: true,
             flex: 2,
-            child: _buildPodiumStep(
-              rank: 1,
-              name: 'Reza Rahardian',
-              rt: 'RT 05 / RW 02',
-              points: '3.450',
-              stepHeight: 100,
-              stepColor: Colors.amber,
-              badgeColor: Colors.amber,
-              avatarBg: const Color(0xFFFFF8E1),
-              avatarIcon: Colors.amber,
-              isTop1: true,
-            ),
           ),
           const SizedBox(width: 8),
           // 3rd place
-          Expanded(
-            child: _buildPodiumStep(
-              rank: 3,
-              name: 'Dika',
-              rt: 'RT 05 / RW 02',
-              points: '2.350',
-              stepHeight: 55,
-              stepColor: Colors.orange,
-              badgeColor: Colors.orange,
-              avatarBg: const Color(0xFFFFF3E0),
-              avatarIcon: Colors.orange,
-            ),
+          stepFor(
+            byRank(3),
+            stepHeight: 55,
+            stepColor: Colors.orange,
+            badgeColor: Colors.orange,
+            avatarBg: const Color(0xFFFFF3E0),
+            avatarIcon: Colors.orange,
           ),
         ],
       ),
@@ -346,11 +525,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         CircleAvatar(
           radius: isTop1 ? 26 : 20,
           backgroundColor: avatarBg,
-          child: Icon(
-            Icons.person,
-            size: isTop1 ? 28 : 22,
-            color: avatarIcon,
-          ),
+          child: Icon(Icons.person, size: isTop1 ? 28 : 22, color: avatarIcon),
         ),
         const SizedBox(height: 4),
         // Name
@@ -430,16 +605,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  Widget _buildRankingList() {
-    final rankings = [
-      {'rank': 4, 'name': 'Devon Lane', 'rt': 'RT 05 / RW 02', 'points': '738'},
-      {'rank': 5, 'name': 'Guy Hawkins', 'rt': 'RT 05 / RW 02', 'points': '703'},
-      {'rank': 6, 'name': 'Marvin McKinney', 'rt': 'RT 05 / RW 02', 'points': '447'},
-      {'rank': 7, 'name': 'Theresa Webb', 'rt': 'RT 05 / RW 02', 'points': '429'},
-      {'rank': 8, 'name': 'Ronald Richards', 'rt': 'RT 05 / RW 02', 'points': '357'},
-      {'rank': 9, 'name': 'Savannah Nguyen', 'rt': 'RT 05 / RW 02', 'points': '154'},
-      {'rank': 10, 'name': 'Jane Cooper', 'rt': 'RT 05 / RW 02', 'points': '130'},
-    ];
+  Widget _buildRankingList(List<LeaderboardPreview> rankings) {
+    final rest = rankings.where((e) => e.rank > 3).toList();
+
+    if (rest.isEmpty) return const SizedBox.shrink();
 
     return Container(
       decoration: BoxDecoration(
@@ -454,14 +623,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ],
       ),
       child: Column(
-        children: List.generate(rankings.length, (index) {
-          final item = rankings[index];
+        children: List.generate(rest.length, (index) {
+          final item = rest[index];
           return _buildRankingItem(
-            rank: item['rank'] as int,
-            name: item['name'] as String,
-            rt: item['rt'] as String,
-            points: item['points'] as String,
-            isLast: index == rankings.length - 1,
+            rank: item.rank,
+            name: item.name,
+            rt: _rtLabel(item),
+            points: _formatXp(item.xp),
+            isLast: index == rest.length - 1,
           );
         }),
       ),
@@ -480,9 +649,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       decoration: BoxDecoration(
         border: isLast
             ? null
-            : Border(
-                bottom: BorderSide(color: Colors.grey.shade100, width: 1),
-              ),
+            : Border(bottom: BorderSide(color: Colors.grey.shade100, width: 1)),
       ),
       child: Row(
         children: [
@@ -552,7 +719,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
               const SizedBox(width: 4),
               const Text(
-                'Poin',
+                'XP',
                 style: TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ],
@@ -564,7 +731,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  Widget _buildBottomCurrentUser() {
+  Widget _buildBottomCurrentUser(LeaderboardPreview? currentUser) {
+    if (currentUser == null) return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -588,9 +756,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             children: [
               const Icon(Icons.emoji_events, color: Colors.green, size: 22),
               const SizedBox(width: 4),
-              const Text(
-                '3',
-                style: TextStyle(
+              Text(
+                '${currentUser.rank}',
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.green,
@@ -612,18 +780,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Dika (kamu)',
-                  style: TextStyle(
+                Text(
+                  '${currentUser.name} (kamu)',
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'RT 05 / RW 02',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                Text(
+                  _rtLabel(currentUser),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
             ),
@@ -641,9 +809,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     const Icon(Icons.eco, color: Colors.green, size: 18),
               ),
               const SizedBox(width: 4),
-              const Text(
-                '2.350',
-                style: TextStyle(
+              Text(
+                _formatXp(currentUser.xp),
+                style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF1B8039),
@@ -651,7 +819,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
               const SizedBox(width: 4),
               const Text(
-                'Poin',
+                'XP',
                 style: TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ],

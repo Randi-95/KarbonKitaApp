@@ -1,5 +1,7 @@
 import '../../core/network/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
+import '../../models/dashboard.dart';
+import '../../models/my_voucher.dart';
 import '../../models/voucher.dart';
 
 /// Akses mentah ke endpoint voucher & dashboard backend.
@@ -23,16 +25,44 @@ class VoucherRemoteDatasource {
   }
 
   /// GET /api/user/dashboard
-  /// Ambil saldo eco_points user dari `data.user.eco_points`.
-  Future<int> fetchEcoPoints() async {
+  /// Ambil paket dashboard Beranda: user, daily_missions, leaderboard_preview.
+  Future<DashboardData> fetchDashboard() async {
     final envelope = await _client.get(ApiEndpoints.userDashboard);
     final data = envelope['data'];
     if (data is Map<String, dynamic>) {
-      final user = data['user'];
-      if (user is Map<String, dynamic>) {
-        return (user['eco_points'] as num? ?? 0).toInt();
-      }
+      return DashboardData.fromJson(data);
     }
-    throw const FormatException('Format saldo poin tidak dikenali.');
+    throw const FormatException('Format dashboard tidak dikenali.');
+  }
+
+  /// GET /api/user/dashboard (delegasi)
+  /// Saldo eco_points diambil dari paket dashboard agar 1 sumber.
+  Future<int> fetchEcoPoints() async {
+    final dashboard = await fetchDashboard();
+    return dashboard.user.ecoPoints;
+  }
+
+  /// GET /api/user/my-vouchers
+  /// Return inventaris dompet: active, used, expired.
+  Future<MyVoucherInventory> fetchMyVouchers() async {
+    final envelope = await _client.get(ApiEndpoints.myVouchers);
+    final data = envelope['data'];
+    if (data is Map<String, dynamic>) {
+      return MyVoucherInventory.fromJson(data);
+    }
+    throw const FormatException('Format dompet voucher tidak dikenali.');
+  }
+
+  /// POST /api/vouchers/claim
+  /// Tukar poin dengan voucher. 201 + QR token bila berhasil.
+  Future<ClaimResult> claimVoucher({required int voucherId}) async {
+    final envelope = await _client.post(ApiEndpoints.vouchersClaim, {
+      'voucher_id': voucherId,
+    });
+    final data = envelope['data'];
+    if (data is Map<String, dynamic>) {
+      return ClaimResult.fromJson(data);
+    }
+    throw const FormatException('Format hasil klaim tidak dikenali.');
   }
 }

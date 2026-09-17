@@ -1,5 +1,6 @@
 import '../../core/network/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
+import '../../models/daily_quiz.dart';
 import '../../models/mission.dart';
 
 /// Akses mentah ke endpoint mission backend.
@@ -23,36 +24,21 @@ class MissionRemoteDatasource {
   }
 
   /// GET /api/saga/quizzes
-  /// Return kuis harian (Saga Map) - backend mengembalikan 1 quiz object, bukan list.
-  Future<List<Mission>> fetchSagaQuizzes() async {
+  /// Return kuis harian (Saga Map) - backend mengembalikan 1 quiz object.
+  Future<DailyQuiz> fetchDailyQuiz() async {
     final envelope = await _client.get(ApiEndpoints.sagaQuizzes);
     final data = envelope['data'];
-    // Backend return single quiz object (Map), bukan List
     if (data is Map<String, dynamic>) {
-      return [_quizToMission(data)];
-    } else if (data is List) {
-      // Fallback jika backend berubah jadi list
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(_quizToMission)
-          .toList();
+      return DailyQuiz.fromJson(data);
     }
-    throw const FormatException('Format daftar kuis tidak dikenali.');
+    throw const FormatException('Format kuis harian tidak dikenali.');
   }
 
-  /// Convert quiz JSON from backend to Mission model
-  Mission _quizToMission(Map<String, dynamic> json) {
-    // Backend QuizResource fields: id, mission_id, mission_title, question, options, order, is_completed_today, xp_reward
-    // Map to Mission fields
-    return Mission(
-      id: (json['id'] as num?)?.toInt() ?? (json['mission_id'] as num?)?.toInt() ?? 0,
-      title: json['mission_title'] as String? ?? json['question'] as String? ?? 'Kuis Harian',
-      description: json['question'] as String? ?? 'Jawab kuis untuk mendapatkan XP',
-      category: 'quiz',
-      xpReward: (json['xp_reward'] as num?)?.toInt() ?? 0,
-      pointsReward: 0, // Quiz tidak beri eco_points
-      icon: '',
-    );
+  /// GET /api/saga/quizzes (delegasi)
+  /// Representasi ringkas untuk daftar misi tab Misi.
+  Future<List<Mission>> fetchSagaQuizzes() async {
+    final quiz = await fetchDailyQuiz();
+    return [quiz.toMission()];
   }
 
   /// POST /api/missions/verify-waste
@@ -85,7 +71,7 @@ class MissionRemoteDatasource {
   }
 
   /// POST /api/saga/answer
-  /// Submit jawaban kuis.
+  /// Submit jawaban kuis. Return envelope mentah (dipakai MissionBloc lama).
   Future<Map<String, dynamic>> submitQuizAnswer({
     required int quizId,
     required String answer,
@@ -95,5 +81,22 @@ class MissionRemoteDatasource {
       'answer': answer,
     });
     return envelope;
+  }
+
+  /// POST /api/saga/answer (typed)
+  /// Return hasil benar/salah + reward. 409/401 diteruskan sebagai exception.
+  Future<QuizAnswerResult> answerQuiz({
+    required int quizId,
+    required String answer,
+  }) async {
+    final envelope = await _client.post(ApiEndpoints.sagaAnswer, {
+      'quiz_id': quizId,
+      'answer': answer.toUpperCase(),
+    });
+    final data = envelope['data'];
+    if (data is Map<String, dynamic>) {
+      return QuizAnswerResult.fromJson(data);
+    }
+    throw const FormatException('Format hasil kuis tidak dikenali.');
   }
 }

@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:animated_bottom_navigation_bar/animated_bottom_navigation_bar.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
+import '../../bloc/dashboard/dashboard_bloc.dart';
+import '../../bloc/dashboard/dashboard_event.dart';
+import '../../bloc/dashboard/dashboard_state.dart';
+import '../../models/dashboard.dart';
+import '../../models/mission.dart';
 import 'misi_screen.dart';
 import 'marketplace_screen.dart';
 import 'leaderboard_screen.dart';
@@ -17,6 +25,60 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool _showQuizFab = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<DashboardBloc>().add(const DashboardLoaded());
+      }
+    });
+  }
+
+  Future<void> _onBerandaRefresh() async {
+    final bloc = context.read<DashboardBloc>();
+    final wait = bloc.stream.firstWhere(
+      (s) => s.status != DashboardStatus.loading,
+    );
+    bloc.add(const DashboardRefreshed());
+    await wait;
+  }
+
+  /// Nama depan untuk sapaan ("Moch. Rafi Andi" -> "Moch.").
+  String _firstName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Kawan';
+    return trimmed.split(RegExp(r'\s+')).first;
+  }
+
+  /// Format ribuan gaya Indonesia (1250 -> "1.250").
+  String _formatPoints(int value) {
+    final digits = value.toString();
+    final buffer = StringBuffer();
+    var count = 0;
+    for (var i = digits.length - 1; i >= 0; i--) {
+      buffer.write(digits[i]);
+      count++;
+      if (count % 3 == 0 && i != 0) buffer.write('.');
+    }
+    return buffer.toString().split('').reversed.join();
+  }
+
+  /// "Top 8%" dari rank_percentage backend (8.0 -> "Top 8%").
+  String _formatRank(double value) {
+    if (value <= 0) return 'Top 100%';
+    final text = value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
+    return 'Top $text%';
+  }
+
+  /// Angka level dari label backend ("Earth Warrior 7" -> "7").
+  String _levelNumber(String level) {
+    final match = RegExp(r'(\d+)').firstMatch(level);
+    return match?.group(1) ?? '1';
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -56,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBody() {
     switch (_selectedIndex) {
       case 0:
-        return _buildBerandaContent();
+        return _buildBeranda();
       case 1:
         return const MisiScreen();
       case 2:
@@ -71,12 +133,77 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       default:
-        return _buildBerandaContent();
+        return _buildBeranda();
     }
   }
 
-  Widget _buildBerandaContent() {
+  /// Beranda reaktif: loading per-section, error + retry, pull-to-refresh.
+  /// Bottom nav tetap aktif karena state dijaga di DashboardBloc.
+  Widget _buildBeranda() {
+    return BlocListener<DashboardBloc, DashboardState>(
+      // Token mati → logout global, SessionGate pindah ke Login.
+      listenWhen: (prev, curr) => !prev.isUnauthorized && curr.isUnauthorized,
+      listener: (context, state) {
+        context.read<AuthBloc>().add(const LoggedOut());
+      },
+      child: BlocBuilder<DashboardBloc, DashboardState>(
+        builder: (context, state) {
+          final dashboard = state.dashboard;
+          final isLoading =
+              state.status == DashboardStatus.loading && dashboard == null;
+
+          if (state.status == DashboardStatus.error && dashboard == null) {
+            return SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      Text(
+                        state.errorMessage ?? 'Gagal memuat dashboard.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => context.read<DashboardBloc>().add(
+                          const DashboardRefreshed(),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF43A047),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Coba Lagi'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: _onBerandaRefresh,
+            color: const Color(0xFF43A047),
+            child: _buildBerandaContent(
+              dashboard: dashboard,
+              isLoading: isLoading,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBerandaContent({
+    DashboardData? dashboard,
+    bool isLoading = false,
+  }) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 20),
       child: Stack(
         children: [
@@ -98,17 +225,45 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildHeader(),
                 const SizedBox(height: 10),
-                _buildProfileSection(),
+                _buildProfileSection(dashboard?.user, isLoading: isLoading),
                 const SizedBox(height: 20),
-                _buildMisiHarian(),
+                _buildMisiHarian(
+                  dashboard?.dailyMissions,
+                  isLoading: isLoading,
+                ),
                 const SizedBox(height: 20),
                 _buildAksiCepat(),
                 const SizedBox(height: 20),
-                _buildPapanPeringkat(),
+                _buildPapanPeringkat(
+                  dashboard?.leaderboardPreview,
+                  isLoading: isLoading,
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Skeleton ringan per-section saat dashboard dimuat.
+  Widget _buildSectionLoading(double height) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 3,
+            color: Color(0xFF43A047),
+          ),
+        ),
       ),
     );
   }
@@ -162,24 +317,31 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProfileSection() {
+  Widget _buildProfileSection(DashboardUser? user, {bool isLoading = false}) {
+    if (isLoading && user == null) {
+      return _buildSectionLoading(150);
+    }
+    final greeting = user == null ? 'Halo!' : 'Halo ${_firstName(user.name)}!';
+    final subtitle = user == null || user.level.isEmpty
+        ? 'Terus jaga bumi, jadi pahlawan hijau!'
+        : '${user.level} • Terus jaga bumi!';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Halo Dika!',
-            style: TextStyle(
+          Text(
+            greeting,
+            style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
           ),
           const SizedBox(height: 5),
-          const Text(
-            'Terus jaga bumi, jadi pahlawan hijau!',
-            style: TextStyle(fontSize: 14, color: Colors.black54),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 14, color: Colors.black54),
           ),
           const SizedBox(height: 10),
           SizedBox(
@@ -240,8 +402,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Text(
+                          children: [
+                            const Text(
                               'Eco Points',
                               style: TextStyle(
                                 fontSize: 10,
@@ -249,8 +411,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             Text(
-                              '1.250',
-                              style: TextStyle(
+                              user == null
+                                  ? '1.250'
+                                  : _formatPoints(user.ecoPoints),
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -300,9 +464,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               ],
                             ),
                             const SizedBox(height: 2),
-                            const Text(
-                              '7 Hari',
-                              style: TextStyle(
+                            Text(
+                              user == null
+                                  ? '7 Hari'
+                                  : '${user.streakDays} Hari',
+                              style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -333,9 +499,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               ],
                             ),
                             const SizedBox(height: 2),
-                            const Text(
-                              'Top 8%',
-                              style: TextStyle(
+                            Text(
+                              user == null
+                                  ? 'Top 8%'
+                                  : _formatRank(user.rankPercentage),
+                              style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -362,8 +530,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           Column(
                             mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Text(
+                            children: [
+                              const Text(
                                 'Level',
                                 style: TextStyle(
                                   color: Colors.white,
@@ -372,8 +540,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               Text(
-                                '12',
-                                style: TextStyle(
+                                user == null ? '12' : _levelNumber(user.level),
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
@@ -405,7 +573,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 child: Container(
-                                  width: 38,
+                                  width: user == null || user.xpMax <= 0
+                                      ? 38
+                                      : (65 *
+                                                (user.xp / user.xpMax).clamp(
+                                                  0.0,
+                                                  1.0,
+                                                ))
+                                            .toDouble(),
                                   decoration: BoxDecoration(
                                     color: Colors.green,
                                     borderRadius: BorderRadius.circular(3),
@@ -414,8 +589,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             const SizedBox(height: 3),
-                            const Text(
-                              '2.350 / 3.500 XP',
+                            Text(
+                              user == null
+                                  ? '2.350 / 3.500 XP'
+                                  : '${_formatPoints(user.xp)} / ${_formatPoints(user.xpMax)} XP',
                               style: TextStyle(
                                 fontSize: 7,
                                 color: Colors.black54,
@@ -436,7 +613,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMisiHarian() {
+  Widget _buildMisiHarian(List<Mission>? missions, {bool isLoading = false}) {
+    if (isLoading && (missions == null || missions.isEmpty)) {
+      return _buildSectionLoading(220);
+    }
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(15),
@@ -499,42 +679,38 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 15),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildMisiCard(
-                  icon: Icons.pedal_bike,
-                  title: 'Pejuang Pedal 2 km',
-                  subtitle: 'Mobilitas 2 Km',
-                  points: '+150 Poin',
-                  xp: '+250 XP',
-                  buttonText: 'Mulai Tracker',
-                  buttonColor: Colors.green,
-                ),
-                const SizedBox(width: 15),
-                _buildMisiCard(
-                  icon: Icons.delete_outline,
-                  title: 'Pahlawan Plastik\nTerpilah',
-                  subtitle: 'Pilah & Upload',
-                  points: '+300 Poin',
-                  xp: '+450 XP',
-                  buttonText: 'Selesaikan Misi',
-                  buttonColor: Colors.orangeAccent,
-                ),
-                const SizedBox(width: 15),
-                _buildMisiCard(
-                  icon: Icons.shopping_bag_outlined,
-                  title: 'Diet Kantong\nPlastik',
-                  subtitle: 'Literasi Lingkungan',
-                  points: '+100 Poin',
-                  xp: '+150 XP',
-                  buttonText: 'Selesaikan Misi',
-                  buttonColor: Colors.green,
-                ),
-              ],
+          if (missions == null || missions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'Misi hari ini sudah selesai. Cek lagi besok!',
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < missions.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 15),
+                    _buildMisiCard(
+                      icon: missions[i].categoryIcon,
+                      title: missions[i].title,
+                      subtitle: missions[i].categoryLabel,
+                      points: '+${missions[i].pointsReward} Poin',
+                      xp: '+${missions[i].xpReward} XP',
+                      buttonText: missions[i].category == 'mobility'
+                          ? 'Mulai Tracker'
+                          : 'Selesaikan Misi',
+                      buttonColor: missions[i].category == 'waste'
+                          ? Colors.orangeAccent
+                          : Colors.green,
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -746,7 +922,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPapanPeringkat() {
+  /// Warna badge peringkat: 1 emas, 2 abu, 3 perunggu.
+  Color _rankBadgeColor(int rank) {
+    switch (rank) {
+      case 1:
+        return Colors.amber;
+      case 2:
+        return Colors.blueGrey;
+      case 3:
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildPapanPeringkat(
+    List<LeaderboardPreview>? preview, {
+    bool isLoading = false,
+  }) {
+    if (isLoading && (preview == null || preview.isEmpty)) {
+      return _buildSectionLoading(180);
+    }
+    final title = preview == null || preview.isEmpty
+        ? 'Papan Peringkat RT 05'
+        : 'Papan Peringkat RT ${preview.first.rt}';
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(15),
@@ -765,9 +964,9 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Papan Peringkat RT 05',
+                  title,
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -789,39 +988,58 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 15),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildPeringkatCard(
-                  '2',
-                  'Alya Nabila',
-                  '2.890 XP',
-                  Colors.blueGrey,
-                  false,
-                ),
-                const SizedBox(width: 10),
-                _buildPeringkatCard(
-                  '1',
-                  'Reza Rahardian',
-                  '3.450 XP',
-                  Colors.amber,
-                  true,
-                ),
-                const SizedBox(width: 10),
-                _buildPeringkatCard(
-                  '3',
-                  'Dika',
-                  '2.350 XP',
-                  Colors.orange,
-                  false,
-                  isCurrentUser: true,
-                ),
-                const SizedBox(width: 10),
-                _buildCurrentPeringkatCard(),
-              ],
+          if (preview == null || preview.isEmpty)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildPeringkatCard(
+                    '2',
+                    'Alya Nabila',
+                    '2.890 XP',
+                    Colors.blueGrey,
+                    false,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildPeringkatCard(
+                    '1',
+                    'Reza Rahardian',
+                    '3.450 XP',
+                    Colors.amber,
+                    true,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildPeringkatCard(
+                    '3',
+                    'Dika',
+                    '2.350 XP',
+                    Colors.orange,
+                    false,
+                    isCurrentUser: true,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildCurrentPeringkatCard(),
+                ],
+              ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < preview.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 10),
+                    _buildPeringkatCard(
+                      preview[i].rank.toString(),
+                      preview[i].name,
+                      '${_formatPoints(preview[i].xp)} XP',
+                      _rankBadgeColor(preview[i].rank),
+                      preview[i].rank == 1,
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );

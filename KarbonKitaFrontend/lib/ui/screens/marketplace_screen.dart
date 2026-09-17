@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
 import '../../bloc/voucher/voucher_bloc.dart';
 import '../../bloc/voucher/voucher_event.dart';
 import '../../bloc/voucher/voucher_state.dart';
@@ -38,28 +40,186 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FA),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 20),
-              _buildPointsAndWalletRow(),
-              const SizedBox(height: 20),
-              _buildCategoryChips(),
-              const SizedBox(height: 20),
-              _buildBanner(),
-              const SizedBox(height: 25),
-              _buildRecommendationsHeader(),
-              const SizedBox(height: 15),
-              _buildProductsGrid(),
-            ],
+    return BlocListener<VoucherBloc, VoucherState>(
+      listenWhen: (prev, curr) =>
+          (!prev.isUnauthorized && curr.isUnauthorized) ||
+          (prev.claimStatus != curr.claimStatus &&
+              (curr.claimStatus == ClaimStatus.success ||
+                  curr.claimStatus == ClaimStatus.failure)),
+      listener: (context, state) {
+        if (state.isUnauthorized) {
+          context.read<AuthBloc>().add(const LoggedOut());
+          return;
+        }
+        if (state.claimStatus == ClaimStatus.success &&
+            state.lastClaim != null) {
+          _showClaimSuccess(
+            state.lastClaim!.qrToken,
+            state.lastClaim!.voucherTitle,
+            state.lastClaim!.remainingPoints,
+          );
+        } else if (state.claimStatus == ClaimStatus.failure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.claimErrorMessage ?? 'Gagal klaim voucher.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          context.read<VoucherBloc>().add(const VoucherClaimReset());
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7F9FA),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 20),
+                _buildPointsAndWalletRow(),
+                const SizedBox(height: 20),
+                _buildCategoryChips(),
+                const SizedBox(height: 20),
+                _buildBanner(),
+                const SizedBox(height: 25),
+                _buildRecommendationsHeader(),
+                const SizedBox(height: 15),
+                _buildProductsGrid(),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _onClaimTap(Voucher voucher) {
+    final ecoPoints = context.read<VoucherBloc>().state.ecoPoints;
+    if (ecoPoints != null && voucher.pointsCost > ecoPoints) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Poin tidak cukup. Butuh ${_formatPoints(voucher.pointsCost)}, '
+            'saldo ${_formatPoints(ecoPoints)}.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Tukar Voucher?'),
+        content: Text(
+          '${voucher.title}\n'
+          'Biaya: ${_formatPoints(voucher.pointsCost)} poin'
+          '${ecoPoints == null ? '' : '\nSisa: ${_formatPoints(ecoPoints - voucher.pointsCost)} poin'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              context.read<VoucherBloc>().add(
+                VoucherClaimSubmitted(voucher.id),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B8039),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Tukar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClaimSuccess(String qrToken, String title, int remaining) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Color(0xFF1B8039)),
+            SizedBox(width: 8),
+            Expanded(child: Text('Voucher Diklaim!')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'KODE VOUCHER',
+                    style: TextStyle(fontSize: 10, color: Colors.black54),
+                  ),
+                  Text(
+                    qrToken,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Sisa poin: ${_formatPoints(remaining)}',
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Tunjukkan kode ini ke kasir merchant untuk ditukar.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              context.read<VoucherBloc>().add(const VoucherClaimReset());
+              Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Tutup'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<VoucherBloc>().add(const VoucherClaimReset());
+              Navigator.of(dialogContext).pop();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DompetVoucherScreen()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B8039),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Lihat Dompet'),
+          ),
+        ],
       ),
     );
   }
@@ -106,13 +266,19 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   color: Colors.black.withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
-                )
+                ),
               ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset('assets/images/ecopoints.png', width: 20, height: 20, errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Colors.green, size: 20)),
+                Image.asset(
+                  'assets/images/ecopoints.png',
+                  width: 20,
+                  height: 20,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.eco, color: Colors.green, size: 20),
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'Poin: ',
@@ -149,11 +315,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const DompetVoucherScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const DompetVoucherScreen(),
+                ),
               );
             },
             icon: const Icon(Icons.account_balance_wallet, size: 18),
-            label: const Text('Dompet Voucher', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            label: const Text(
+              'Dompet Voucher',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1B8039),
               foregroundColor: Colors.white,
@@ -191,7 +362,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 });
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected ? Colors.green : Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -213,7 +387,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       style: TextStyle(
                         color: isSelected ? Colors.white : Colors.grey.shade600,
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -240,7 +416,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   Widget _buildRecommendationsHeader() {
     return Row(
       children: [
-        Image.asset('assets/images/ecopoints.png', width: 20, height: 20, errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Colors.green, size: 20)),
+        Image.asset(
+          'assets/images/ecopoints.png',
+          width: 20,
+          height: 20,
+          errorBuilder: (context, error, stackTrace) =>
+              const Icon(Icons.eco, color: Colors.green, size: 20),
+        ),
         const SizedBox(width: 8),
         const Expanded(
           child: Text(
@@ -273,7 +455,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   Widget _buildProductsGrid() {
     return BlocBuilder<VoucherBloc, VoucherState>(
       buildWhen: (prev, curr) =>
-          prev.status != curr.status || prev.vouchers != curr.vouchers,
+          prev.status != curr.status ||
+          prev.vouchers != curr.vouchers ||
+          prev.claimStatus != curr.claimStatus ||
+          prev.claimingVoucherId != curr.claimingVoucherId ||
+          prev.ecoPoints != curr.ecoPoints,
       builder: (context, state) {
         if (state.status == VoucherStatus.loading ||
             state.status == VoucherStatus.initial) {
@@ -286,9 +472,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         }
 
         if (state.status == VoucherStatus.error) {
-          return _buildErrorState(
-            state.errorMessage ?? 'Terjadi kesalahan',
-          );
+          return _buildErrorState(state.errorMessage ?? 'Terjadi kesalahan');
         }
 
         if (state.vouchers.isEmpty) {
@@ -302,8 +486,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           childAspectRatio: 0.62,
-          children:
-              state.vouchers.map((voucher) => _buildProductCard(voucher)).toList(),
+          children: state.vouchers
+              .map((voucher) => _buildProductCard(voucher))
+              .toList(),
         );
       },
     );
@@ -321,7 +506,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -366,7 +551,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -396,7 +581,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -405,7 +590,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           Expanded(
             flex: 5,
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(15),
+              ),
               child: voucher.imageUrl.isNotEmpty
                   ? Image.network(
                       voucher.imageUrl,
@@ -413,12 +600,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(
                         color: Colors.grey.shade200,
-                        child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+                        child: const Center(
+                          child: Icon(Icons.image, color: Colors.grey),
+                        ),
                       ),
                     )
                   : Container(
                       color: Colors.grey.shade200,
-                      child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+                      child: const Center(
+                        child: Icon(Icons.image, color: Colors.grey),
+                      ),
                     ),
             ),
           ),
@@ -436,8 +627,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         radius: 10,
                         backgroundColor: Colors.brown.shade100,
                         child: Text(
-                          storeName.isNotEmpty ? storeName[0].toUpperCase() : '-',
-                          style: TextStyle(fontSize: 10, color: Colors.brown.shade800, fontWeight: FontWeight.bold),
+                          storeName.isNotEmpty
+                              ? storeName[0].toUpperCase()
+                              : '-',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.brown.shade800,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -447,15 +644,34 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           children: [
                             Text(
                               storeName,
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             Row(
                               children: [
-                                Image.asset('assets/images/ecopoints.png', width: 12, height: 12, errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Colors.green, size: 12)),
+                                Image.asset(
+                                  'assets/images/ecopoints.png',
+                                  width: 12,
+                                  height: 12,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.eco,
+                                        color: Colors.green,
+                                        size: 12,
+                                      ),
+                                ),
                                 const SizedBox(width: 2),
-                                const Text('UMKM', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                                const Text(
+                                  'UMKM',
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
@@ -474,41 +690,80 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      // Tampilan saja: klaim voucher belum diimplementasikan.
-                      onPressed: null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE8F5E9),
-                        foregroundColor: const Color(0xFF1B8039),
-                        disabledBackgroundColor: const Color(0xFFE8F5E9),
-                        disabledForegroundColor: const Color(0xFF1B8039),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: const BorderSide(color: Color(0xFF1B8039), width: 1),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Image.asset('assets/images/ecopoints.png', width: 14, height: 14, errorBuilder: (context, error, stackTrace) => const Icon(Icons.eco, color: Color(0xFF1B8039), size: 14)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Tukar ${_formatPoints(voucher.pointsCost)} Poin',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                  BlocBuilder<VoucherBloc, VoucherState>(
+                    buildWhen: (prev, curr) =>
+                        prev.claimStatus != curr.claimStatus ||
+                        prev.claimingVoucherId != curr.claimingVoucherId,
+                    builder: (context, claimState) {
+                      final claimingThis =
+                          claimState.claimStatus == ClaimStatus.claiming &&
+                          claimState.claimingVoucherId == voucher.id;
+                      return SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: claimingThis
+                              ? null
+                              : () => _onClaimTap(voucher),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE8F5E9),
+                            foregroundColor: const Color(0xFF1B8039),
+                            disabledBackgroundColor: const Color(0xFFE8F5E9),
+                            disabledForegroundColor: const Color(0xFF1B8039),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: const BorderSide(
+                                color: Color(0xFF1B8039),
+                                width: 1,
                               ),
                             ),
-                          ],
+                            elevation: 0,
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (claimingThis)
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF1B8039),
+                                    ),
+                                  )
+                                else ...[
+                                  Image.asset(
+                                    'assets/images/ecopoints.png',
+                                    width: 14,
+                                    height: 14,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            const Icon(
+                                              Icons.eco,
+                                              color: Color(0xFF1B8039),
+                                              size: 14,
+                                            ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Tukar ${_formatPoints(voucher.pointsCost)} Poin',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ],
               ),

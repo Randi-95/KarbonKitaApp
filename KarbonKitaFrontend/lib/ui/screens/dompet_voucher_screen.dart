@@ -1,6 +1,14 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
+import '../../bloc/voucher/voucher_bloc.dart';
+import '../../bloc/voucher/voucher_event.dart';
+import '../../bloc/voucher/voucher_state.dart';
+import '../../models/my_voucher.dart';
 
 class DompetVoucherScreen extends StatefulWidget {
   const DompetVoucherScreen({super.key});
@@ -13,18 +21,114 @@ class _DompetVoucherScreenState extends State<DompetVoucherScreen> {
   int _selectedTab = 0;
 
   final List<String> _tabLabels = ['Voucher Aktif', 'Riwayat', 'Kedaluwarsa'];
-  final List<int> _tabCounts = [3, 4, 2];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<VoucherBloc>().add(const MyVouchersLoaded());
+      }
+    });
+  }
+
+  /// Format rupiah: 15000 -> "Rp 15.000".
+  String _formatRupiah(double value) {
+    final digits = value.round().toString();
+    final buffer = StringBuffer();
+    var count = 0;
+    for (var i = digits.length - 1; i >= 0; i--) {
+      buffer.write(digits[i]);
+      count++;
+      if (count % 3 == 0 && i != 0) buffer.write('.');
+    }
+    return 'Rp ${buffer.toString().split('').reversed.join()}';
+  }
+
+  static const _months = [
+    '',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
+  ];
+
+  /// Format tanggal backend (Y-m-d) ke "28 Jun 2025".
+  String _formatExpiry(String raw) {
+    try {
+      final parts = raw.split('-');
+      if (parts.length != 3) return raw;
+      final day = int.parse(parts[2].substring(0, 2));
+      final month = int.parse(parts[1]);
+      final year = parts[0];
+      if (month < 1 || month > 12) return raw;
+      return '$day ${_months[month]} $year';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  List<MyVoucherClaim> _claimsForTab(MyVoucherInventory? inventory) {
+    if (inventory == null) return const [];
+    switch (_selectedTab) {
+      case 0:
+        return inventory.active;
+      case 1:
+        return inventory.used;
+      case 2:
+        return inventory.expired;
+      default:
+        return const [];
+    }
+  }
+
+  /// Adaptasi klaim asli ke map kartu tiket yang sudah ada.
+  Map<String, dynamic> _claimToCard(MyVoucherClaim claim) {
+    const palette = [
+      Color(0xFF234A2F),
+      Color(0xFF3E2063),
+      Color(0xFF1E6C46),
+      Color(0xFF5D4037),
+    ];
+    final words = claim.storeName.trim().isEmpty
+        ? ['TOKO']
+        : claim.storeName.trim().split(RegExp(r'\s+'));
+    return {
+      'storeName': claim.storeName.isEmpty ? claim.ownerName : claim.storeName,
+      'discount': _formatRupiah(claim.rupiahValue),
+      'expiry': _formatExpiry(claim.expiredAt),
+      'leftColor': palette[claim.claimId % palette.length],
+      'logoIcon': Icons.storefront,
+      'iconColor': const Color(0xFF2E9E4B),
+      'logoLine1': words.first.toUpperCase(),
+      'logoLine2': words.length > 1 ? words[1].toUpperCase() : '',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F9F6),
-      body: Column(
-        children: [
-          _buildHeader(),
-          _buildTabBar(),
-          Expanded(child: _buildVoucherList()),
-        ],
+    return BlocListener<VoucherBloc, VoucherState>(
+      listenWhen: (prev, curr) => !prev.isUnauthorized && curr.isUnauthorized,
+      listener: (context, state) {
+        context.read<AuthBloc>().add(const LoggedOut());
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F9F6),
+        body: Column(
+          children: [
+            _buildHeader(),
+            _buildTabBar(),
+            Expanded(child: _buildVoucherList()),
+          ],
+        ),
       ),
     );
   }
@@ -105,176 +209,202 @@ class _DompetVoucherScreenState extends State<DompetVoucherScreen> {
     );
   }
 
+  List<int> _tabCounts(MyVoucherInventory? inventory) {
+    final inv = inventory ?? const MyVoucherInventory.empty();
+    return [inv.active.length, inv.used.length, inv.expired.length];
+  }
+
   Widget _buildTabBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      color: const Color(0xFFF5F9F6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: List.generate(_tabLabels.length, (index) {
-            final isSelected = _selectedTab == index;
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedTab = index;
-                });
-              },
-              child: Container(
-                margin: EdgeInsets.only(
-                  right: index < _tabLabels.length - 1 ? 12 : 0,
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? const Color(0xFF1E6C46)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _tabLabels[index],
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFF6B7B74),
-                        fontSize: 13,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                      ),
+    return BlocBuilder<VoucherBloc, VoucherState>(
+      buildWhen: (prev, curr) => prev.myVouchers != curr.myVouchers,
+      builder: (context, state) {
+        final counts = _tabCounts(state.myVouchers);
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          color: const Color(0xFFF5F9F6),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: List.generate(_tabLabels.length, (index) {
+                final isSelected = _selectedTab == index;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedTab = index;
+                    });
+                  },
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      right: index < _tabLabels.length - 1 ? 12 : 0,
                     ),
-                    if (_tabCounts[index] > 0) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.25)
-                              : const Color(0xFFE0E5E2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '${_tabCounts[index]}',
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFF1E6C46)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _tabLabels[index],
                           style: TextStyle(
                             color: isSelected
                                 ? Colors.white
                                 : const Color(0xFF6B7B74),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                           ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVoucherList() {
-    final vouchers = _getVouchersForTab();
-
-    if (vouchers.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inbox_outlined, size: 60, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'Tidak ada voucher',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade500,
-                fontWeight: FontWeight.w500,
-              ),
+                        if (counts[index] > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.white.withValues(alpha: 0.25)
+                                  : const Color(0xFFE0E5E2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${counts[index]}',
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : const Color(0xFF6B7B74),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
             ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: vouchers.length,
-      itemBuilder: (context, index) {
-        return _buildVoucherCard(vouchers[index]);
+          ),
+        );
       },
     );
   }
 
-  List<Map<String, dynamic>> _getVouchersForTab() {
-    switch (_selectedTab) {
-      case 0:
-        return [
-          {
-            'storeName': 'Kedai Kopi Nusantara',
-            'discount': 'Rp 15.000',
-            'expiry': '28 Jun 2025',
-            'leftColor': const Color(0xFF234A2F),
-            'logoIcon': Icons.coffee,
-            'iconColor': const Color(0xFFB5651D),
-            'logoLine1': 'KEDAI KOPI',
-            'logoLine2': 'NUSANTARA',
+  Widget _buildVoucherList() {
+    return BlocBuilder<VoucherBloc, VoucherState>(
+      buildWhen: (prev, curr) =>
+          prev.inventoryStatus != curr.inventoryStatus ||
+          prev.myVouchers != curr.myVouchers ||
+          prev.inventoryError != curr.inventoryError,
+      builder: (context, state) {
+        if (state.inventoryStatus == InventoryStatus.loading ||
+            state.inventoryStatus == InventoryStatus.initial) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF1E6C46)),
+          );
+        }
+
+        if (state.inventoryStatus == InventoryStatus.error &&
+            state.myVouchers == null) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(
+                    state.inventoryError ?? 'Gagal memuat dompet.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => context.read<VoucherBloc>().add(
+                      const MyVouchersLoaded(force: true),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E6C46),
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Coba Lagi'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final claims = _claimsForTab(state.myVouchers);
+        if (claims.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.inbox_outlined,
+                  size: 60,
+                  color: Colors.grey.shade300,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _selectedTab == 0
+                      ? 'Belum ada voucher aktif.\nTukar poin di marketplace!'
+                      : 'Tidak ada voucher',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            final bloc = context.read<VoucherBloc>();
+            final wait = bloc.stream.firstWhere(
+              (s) => s.inventoryStatus != InventoryStatus.loading,
+            );
+            bloc.add(const MyVouchersLoaded(force: true));
+            await wait;
           },
-          {
-            'storeName': 'OrganikKu Store',
-            'discount': 'Rp 10.000',
-            'expiry': '20 Jun 2025',
-            'leftColor': const Color(0xFF3E2063),
-            'logoIcon': Icons.eco,
-            'iconColor': const Color(0xFF2E9E4B),
-            'logoLine1': 'OrganikKu',
-            'logoLine2': '',
-          },
-        ];
-      case 1:
-        return [
-          {
-            'storeName': 'Toko Hijau',
-            'discount': 'Rp 5.000',
-            'expiry': '15 Mar 2025',
-            'leftColor': const Color(0xFF234A2F),
-            'logoIcon': Icons.storefront,
-            'iconColor': const Color(0xFF2E9E4B),
-            'logoLine1': 'TOKO',
-            'logoLine2': 'HIJAU',
-          },
-        ];
-      case 2:
-        return [
-          {
-            'storeName': 'Rumah Organik',
-            'discount': 'Rp 8.000',
-            'expiry': '1 Jan 2025',
-            'leftColor': const Color(0xFF7A8A7E),
-            'logoIcon': Icons.spa,
-            'iconColor': Colors.grey,
-            'logoLine1': 'RUMAH',
-            'logoLine2': 'ORGANIK',
-          },
-        ];
-      default:
-        return [];
-    }
+          color: const Color(0xFF1E6C46),
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: claims.length,
+            itemBuilder: (context, index) {
+              final claim = claims[index];
+              return _buildVoucherCard(
+                _claimToCard(claim),
+                onTap: () => _onClaimTap(claim),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
-  Widget _buildVoucherCard(Map<String, dynamic> voucher) {
+  Widget _buildVoucherCard(
+    Map<String, dynamic> voucher, {
+    required VoidCallback onTap,
+  }) {
     final bool isExpired = _selectedTab == 2;
     const double leftWidth = 122;
     const double toothDepth = 5;
@@ -285,7 +415,7 @@ class _DompetVoucherScreenState extends State<DompetVoucherScreen> {
         : (voucher['leftColor'] as Color? ?? const Color(0xFF234A2F));
 
     return GestureDetector(
-      onTap: () => _onVoucherTap(voucher, isExpired),
+      onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
@@ -483,30 +613,29 @@ class _DompetVoucherScreenState extends State<DompetVoucherScreen> {
     );
   }
 
-  void _onVoucherTap(Map<String, dynamic> voucher, bool isExpired) {
-    if (isExpired || _selectedTab == 2) {
+  void _onClaimTap(MyVoucherClaim claim) {
+    if (_selectedTab == 2 || !claim.isActive) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Voucher sudah kedaluwarsa')),
+        SnackBar(
+          content: Text(
+            claim.isUsed
+                ? 'Voucher sudah digunakan'
+                : 'Voucher sudah kedaluwarsa',
+          ),
+        ),
       );
       return;
     }
-    final token = _dummyToken(voucher['storeName'] as String? ?? '');
+    final storeName = claim.storeName.isEmpty
+        ? claim.ownerName
+        : claim.storeName;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _RedeemSheet(
-        storeName: voucher['storeName'] as String? ?? '',
-        token: token,
-      ),
+      builder: (context) =>
+          _RedeemSheet(storeName: storeName, token: claim.qrToken),
     );
-  }
-
-  String _dummyToken(String seed) {
-    final h = seed.hashCode.abs();
-    final a = (1000 + h % 9000).toString();
-    final b = (1000 + (h ~/ 7) % 9000).toString();
-    return '$a-$b';
   }
 
   Widget _buildLogoCircle(Map<String, dynamic> voucher, bool isExpired) {
@@ -770,7 +899,7 @@ class _RedeemSheetState extends State<_RedeemSheet> {
             width: 200,
             height: 200,
             child: CustomPaint(
-              painter: _DummyQrPainter(seed: widget.storeName.hashCode),
+              painter: _DummyQrPainter(seed: widget.token.hashCode),
             ),
           ),
           const SizedBox(height: 16),

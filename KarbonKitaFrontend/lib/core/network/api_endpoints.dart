@@ -24,9 +24,19 @@ class ApiEndpoints {
 
   // Marketplace (Voucher)
   static const String vouchers = '/vouchers';
+  static const String vouchersClaim = '/vouchers/claim';
+  static const String myVouchers = '/user/my-vouchers';
 
   // Dashboard (saldo eco_points)
   static const String userDashboard = '/user/dashboard';
+
+  // Leaderboard (scope: rt|rw, timeframe: weekly|monthly)
+  static const String leaderboard = '/leaderboard';
+
+  static String leaderboardQuery({
+    required String scope,
+    required String timeframe,
+  }) => '$leaderboard?scope=$scope&timeframe=$timeframe';
 
   static String url(String path) => '$baseUrl$path';
 }
