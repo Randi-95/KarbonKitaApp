@@ -186,6 +186,17 @@ void main() {
       expect(node.todayQuizId, isNull);
     });
 
+    test('node selesai persisten (is_completed) tetap tampil done', () {
+      final node = QuizNode.fromJson({
+        ..._nodeJson(position: 1, playable: false, completed: false),
+        'is_completed': true,
+      });
+
+      expect(node.isCompleted, isTrue);
+      expect(node.isDone, isTrue);
+      expect(node.isPlayableToday, isFalse);
+    });
+
     test('tepat 1 playable dari daftar backend', () {
       final nodes = [
         QuizNode.fromJson(_nodeJson(position: 1, playable: false)),

@@ -66,7 +66,7 @@ class SagaSessionTest extends TestCase
     {
         $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
         $playable = collect($nodes)->firstWhere('is_playable_today', true);
-        $this->assertNotNull($playable, 'Harus ada tepat 1 node playable.');
+        $this->assertNotNull($playable, 'Harus ada node playable.');
 
         $questions = $this->getJson(
             "/api/saga/nodes/{$playable['id']}/questions",
@@ -93,6 +93,7 @@ class SagaSessionTest extends TestCase
     {
         $user = $this->makeUser();
         $this->makeBank($this->makeQuizMission(['title' => 'A']));
+        $this->makeBank($this->makeQuizMission(['title' => 'B']));
         $locked = $this->makeQuizMission(['title' => 'Locked']);
         $this->makeBank($locked);
 
@@ -258,6 +259,7 @@ class SagaSessionTest extends TestCase
     {
         $user = $this->makeUser();
         $this->makeBank($this->makeQuizMission(['title' => 'A']));
+        $this->makeBank($this->makeQuizMission(['title' => 'B']));
         $locked = $this->makeQuizMission(['title' => 'Locked']);
         $this->makeBank($locked);
 
@@ -269,6 +271,50 @@ class SagaSessionTest extends TestCase
             'quiz_id' => $lockedQuiz->id,
             'answer' => 'B',
         ], $this->authHeader($user))->assertStatus(422);
+    }
+
+    public function test_two_different_playable_nodes_answerable_same_day(): void
+    {
+        $user = $this->makeUser();
+        $this->makeBank($this->makeQuizMission(['title' => 'A', 'xp_reward' => 50]));
+        $this->makeBank($this->makeQuizMission(['title' => 'B', 'xp_reward' => 50]));
+        $this->makeBank($this->makeQuizMission(['title' => 'C', 'xp_reward' => 50]));
+
+        $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
+        $playables = collect($nodes)->where('is_playable_today', true)->values();
+        $this->assertCount(2, $playables);
+        $this->assertCount(2, $playables->pluck('id')->unique()->all());
+
+        $totalXp = 0;
+        foreach ($playables as $playable) {
+            $session = $this->getJson(
+                "/api/saga/nodes/{$playable['id']}/questions",
+                $this->authHeader($user)
+            )->assertOk()->json('data');
+            $this->assertEquals($playable['id'], $session['mission_id']);
+
+            $first = $session['questions'][0];
+            $response = $this->postJson('/api/saga/answer', [
+                'quiz_id' => $first['id'],
+                'answer' => 'B',
+            ], $this->authHeader($user));
+            $response->assertOk()->assertJsonPath('data.is_correct', true);
+            $totalXp += $response->json('data.xp_earned');
+        }
+
+        $this->assertEquals(20, $totalXp);
+        $this->assertEquals(20, $user->fresh()->wargaProfile->xp);
+
+        // Kedua node playable tetap sama setelah mengerjakan keduanya.
+        $again = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
+        $playablesAgain = collect($again)->where('is_playable_today', true)->values();
+        $this->assertEquals(
+            $playables->pluck('id')->sort()->values()->all(),
+            $playablesAgain->pluck('id')->sort()->values()->all()
+        );
+        foreach ($playablesAgain as $node) {
+            $this->assertEquals(1, $node['answered_today']);
+        }
     }
 
     public function test_route_name_resolves(): void

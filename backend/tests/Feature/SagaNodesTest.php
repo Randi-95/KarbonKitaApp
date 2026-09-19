@@ -7,6 +7,7 @@ use App\Models\Quiz;
 use App\Models\User;
 use App\Models\UserMission;
 use App\Models\WargaProfile;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -81,7 +82,7 @@ class SagaNodesTest extends TestCase
                         'id', 'title', 'description', 'icon', 'xp_reward',
                         'position', 'quizzes_count', 'total_questions',
                         'answered_today',
-                        'is_completed_today', 'is_playable_today',
+                        'is_completed_today', 'is_completed', 'is_playable_today',
                     ],
                 ],
             ])
@@ -89,13 +90,164 @@ class SagaNodesTest extends TestCase
         $this->assertCount(1, $response->json('data'));
     }
 
-    public function test_exactly_one_playable_node_per_day(): void
+    public function test_first_two_nodes_playable_from_bottom(): void
     {
         $user = $this->makeUser();
+        $ids = [];
         foreach (range(1, 3) as $i) {
             $mission = $this->makeQuizMission(['title' => "Quiz {$i}"]);
             $this->makeQuiz($mission, ['question' => "Q{$i}?"]);
+            $ids[] = $mission->id;
         }
+
+        $response = $this->getJson('/api/saga/nodes', $this->authHeader($user));
+
+        $response->assertOk();
+        $playableIds = collect($response->json('data'))
+            ->where('is_playable_today', true)
+            ->pluck('id')
+            ->values()
+            ->all();
+        // 2 node terendah (dari bawah) yang terbuka, sisanya locked.
+        $this->assertEquals([$ids[0], $ids[1]], $playableIds);
+    }
+
+    public function test_progression_advances_after_node_finished(): void
+    {
+        $user = $this->makeUser();
+        $missionA = $this->makeQuizMission(['title' => 'A']);
+        $quizA = $this->makeQuiz($missionA, ['question' => 'QA?']);
+        $missionB = $this->makeQuizMission(['title' => 'B']);
+        $this->makeQuiz($missionB, ['question' => 'QB?']);
+        $missionC = $this->makeQuizMission(['title' => 'C']);
+        $this->makeQuiz($missionC, ['question' => 'QC?']);
+
+        // Selesaikan node A (sesi 1 soal) dengan jawaban salah sekalipun.
+        $wrongAnswer = $quizA->correct_answer === 'A' ? 'B' : 'A';
+        $this->postJson('/api/saga/answer', [
+            'quiz_id' => $quizA->id,
+            'answer' => $wrongAnswer,
+        ], $this->authHeader($user))->assertOk();
+
+        // Progres maju: A selesai (tetap terbuka untuk review), B + C terbuka.
+        $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
+        $playableIds = collect($nodes)->where('is_playable_today', true)->pluck('id')->values()->all();
+        $this->assertEquals([$missionA->id, $missionB->id, $missionC->id], array_column($nodes, 'id'));
+        $this->assertEquals([$missionA->id, $missionB->id, $missionC->id], $playableIds);
+
+        $nodeA = collect($nodes)->firstWhere('id', $missionA->id);
+        $this->assertTrue($nodeA['is_completed_today']);
+        $this->assertTrue($nodeA['is_completed']);
+        $this->assertTrue(UserMission::where('user_id', $user->id)->where('status', 'rejected')->exists());
+    }
+
+    public function test_skip_day_keeps_progress_not_forfeited(): void
+    {
+        $user = $this->makeUser();
+        $missionA = $this->makeQuizMission(['title' => 'A']);
+        $quizA = $this->makeQuiz($missionA, ['question' => 'QA?']);
+        $missionB = $this->makeQuizMission(['title' => 'B']);
+        $this->makeQuiz($missionB, ['question' => 'QB?']);
+        $missionC = $this->makeQuizMission(['title' => 'C']);
+        $this->makeQuiz($missionC, ['question' => 'QC?']);
+
+        // Selesaikan A, lalu mundurkan attempt ke kemarin (simulasi skip sehari).
+        $this->postJson('/api/saga/answer', [
+            'quiz_id' => $quizA->id,
+            'answer' => $quizA->correct_answer,
+        ], $this->authHeader($user))->assertOk();
+        UserMission::where('user_id', $user->id)->update([
+            'created_at' => Carbon::now('Asia/Jakarta')->subDay(),
+            'updated_at' => Carbon::now('Asia/Jakarta')->subDay(),
+        ]);
+
+        // Hari ini: A tetap selesai (persisten), B + C terbuka, tidak ada
+        // yang hangus / di-reset ke bawah.
+        $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
+        $nodeA = collect($nodes)->firstWhere('id', $missionA->id);
+        $this->assertTrue($nodeA['is_completed']);
+        $this->assertFalse($nodeA['is_completed_today']);
+        $this->assertFalse($nodeA['is_playable_today']);
+        $this->assertEquals(0, $nodeA['answered_today']);
+
+        $playableIds = collect($nodes)->where('is_playable_today', true)->pluck('id')->values()->all();
+        $this->assertEquals([$missionB->id, $missionC->id], $playableIds);
+    }
+
+    public function test_daily_cap_two_nodes_then_next_locked(): void
+    {
+        $user = $this->makeUser();
+        $missions = [];
+        $quizzes = [];
+        foreach (range(1, 4) as $i) {
+            $mission = $this->makeQuizMission(['title' => "M{$i}"]);
+            $quizzes[] = $this->makeQuiz($mission, ['question' => "Q{$i}?"]);
+            $missions[] = $mission;
+        }
+
+        // Selesaikan 2 node hari ini → cap harian tercapai.
+        foreach ([$quizzes[0], $quizzes[1]] as $quiz) {
+            $this->postJson('/api/saga/answer', [
+                'quiz_id' => $quiz->id,
+                'answer' => $quiz->correct_answer,
+            ], $this->authHeader($user))->assertOk();
+        }
+
+        $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
+        $playableIds = collect($nodes)->where('is_playable_today', true)->pluck('id')->values()->all();
+        $this->assertEquals([$missions[0]->id, $missions[1]->id], $playableIds);
+
+        $nodeC = collect($nodes)->firstWhere('id', $missions[2]->id);
+        $this->assertFalse($nodeC['is_playable_today']);
+        $this->assertFalse($nodeC['is_completed']);
+
+        // Node berikut terkunci: tidak bisa lihat soal maupun jawab.
+        $this->getJson(
+            "/api/saga/nodes/{$missions[2]->id}/questions",
+            $this->authHeader($user)
+        )->assertStatus(403);
+        $this->postJson('/api/saga/answer', [
+            'quiz_id' => $quizzes[2]->id,
+            'answer' => $quizzes[2]->correct_answer,
+        ], $this->authHeader($user))->assertStatus(422);
+
+        // Node selesai hari ini tetap bisa dibuka untuk review.
+        $this->getJson(
+            "/api/saga/nodes/{$missions[0]->id}/questions",
+            $this->authHeader($user)
+        )->assertOk();
+    }
+
+    public function test_finished_node_answerable_neither_replay_nor_farm(): void
+    {
+        $user = $this->makeUser();
+        $missionA = $this->makeQuizMission(['title' => 'A']);
+        $quizA = $this->makeQuiz($missionA, ['question' => 'QA?']);
+        $missionB = $this->makeQuizMission(['title' => 'B']);
+        $this->makeQuiz($missionB, ['question' => 'QB?']);
+
+        $this->postJson('/api/saga/answer', [
+            'quiz_id' => $quizA->id,
+            'answer' => $quizA->correct_answer,
+        ], $this->authHeader($user))->assertOk();
+
+        // Soal yang sama tidak bisa dijawab ulang (409, tanpa XP ganda).
+        $this->postJson('/api/saga/answer', [
+            'quiz_id' => $quizA->id,
+            'answer' => $quizA->correct_answer,
+        ], $this->authHeader($user))->assertStatus(409);
+
+        $this->assertEquals(
+            intdiv($missionA->xp_reward, 1),
+            $user->fresh()->wargaProfile->xp
+        );
+    }
+
+    public function test_single_playable_when_only_one_mission_exists(): void
+    {
+        $user = $this->makeUser();
+        $mission = $this->makeQuizMission(['title' => 'Only']);
+        $this->makeQuiz($mission, ['question' => 'Q?']);
 
         $response = $this->getJson('/api/saga/nodes', $this->authHeader($user));
 
@@ -179,6 +331,7 @@ class SagaNodesTest extends TestCase
         $node = collect($response->json('data'))->firstWhere('id', $mission->id);
         $this->assertNotNull($node);
         $this->assertTrue($node['is_completed_today']);
+        $this->assertTrue($node['is_completed']);
         $this->assertTrue($node['is_playable_today']);
     }
 
@@ -200,34 +353,33 @@ class SagaNodesTest extends TestCase
         $this->assertEquals('/api/saga/nodes', route('saga.nodes', [], false));
     }
 
-    public function test_sticky_playable_after_wrong_attempt(): void
+    public function test_partial_attempt_does_not_advance_progression(): void
     {
         $user = $this->makeUser();
         $missionA = $this->makeQuizMission(['title' => 'A']);
-        $quizA = $this->makeQuiz($missionA, ['question' => 'QA?']);
+        $quizA1 = $this->makeQuiz($missionA, ['question' => 'QA1?']);
+        $this->makeQuiz($missionA, ['question' => 'QA2?', 'order' => 2]);
         $missionB = $this->makeQuizMission(['title' => 'B']);
         $this->makeQuiz($missionB, ['question' => 'QB?']);
+        $missionC = $this->makeQuizMission(['title' => 'C']);
+        $this->makeQuiz($missionC, ['question' => 'QC?']);
 
-        // Cari node playable hari ini, jawab salah di quiz-nya.
-        $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
-        $playable = collect($nodes)->firstWhere('is_playable_today', true);
-        $this->assertNotNull($playable);
-
-        $wrongQuiz = Quiz::find($playable['today_quiz_id']);
-        $wrongAnswer = $wrongQuiz->correct_answer === 'A' ? 'B' : 'A';
+        // Jawab 1 dari 2 soal node A → belum selesai → progres tidak maju.
         $this->postJson('/api/saga/answer', [
-            'quiz_id' => $wrongQuiz->id,
-            'answer' => $wrongAnswer,
+            'quiz_id' => $quizA1->id,
+            'answer' => $quizA1->correct_answer,
         ], $this->authHeader($user))->assertOk();
 
-        // Node playable harus tetap sama (sticky). Sesi 1 soal yang
-        // terjawab-salah dianggap selesai (semua soal sudah terjawab).
-        $again = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
-        $playableAgain = collect($again)->firstWhere('is_playable_today', true);
-        $this->assertEquals($playable['id'], $playableAgain['id']);
-        $this->assertTrue($playableAgain['is_completed_today']);
-        $this->assertEquals(1, $playableAgain['answered_today']);
-        $this->assertTrue(UserMission::where('user_id', $user->id)->where('status', 'rejected')->exists());
-        $this->assertNotNull($quizA);
+        $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
+        $playableIds = collect($nodes)->where('is_playable_today', true)->pluck('id')->values()->all();
+        $this->assertEquals([$missionA->id, $missionB->id], $playableIds);
+
+        $nodeA = collect($nodes)->firstWhere('id', $missionA->id);
+        $this->assertFalse($nodeA['is_completed_today']);
+        $this->assertFalse($nodeA['is_completed']);
+        $this->assertEquals(1, $nodeA['answered_today']);
+
+        $nodeC = collect($nodes)->firstWhere('id', $missionC->id);
+        $this->assertFalse($nodeC['is_playable_today']);
     }
 }

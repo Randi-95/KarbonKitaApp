@@ -19,7 +19,8 @@ import '../widgets/quiz/quiz_stage_node.dart';
 /// Halaman Level Kuis bergaya gamifikasi (Duolingo-like).
 /// Dibuka via Floating Widget kuis (FABKuis) dengan full-screen push.
 /// Daftar node (1 node = 1 misi quiz) dimuat dari backend via QuizBloc;
-/// tepat 1 node playable per hari, sisanya locked.
+/// maksimal 2 node berikutnya yang belum selesai terbuka berurutan
+/// dari bawah, sisanya locked. Skip sehari tidak menghanguskan progres.
 class QuizLevelScreen extends StatefulWidget {
   const QuizLevelScreen({super.key});
 
@@ -41,7 +42,7 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
 
   /// Petakan node backend ke model tampilan stage.
   QuizStage _stageFor(QuizNode node) {
-    final status = node.isCompletedToday
+    final status = node.isDone
         ? QuizStageStatus.completed
         : node.isPlayableToday
         ? QuizStageStatus.active
@@ -331,11 +332,11 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
     return widgets;
   }
 
-  /// Kartu hadiah jujur: XP babak hari ini, bukan poin fiktif.
+  /// Kartu hadiah jujur: total XP babak playable hari ini (2 node).
   Widget _buildRewardCard(List<QuizNode> nodes) {
-    final playable =
-        nodes.where((n) => n.isPlayableToday).firstOrNull ?? nodes.firstOrNull;
-    final xp = playable?.xpReward ?? 0;
+    final playables = nodes.where((n) => n.isPlayableToday).toList();
+    final shown = playables.isNotEmpty ? playables : nodes.take(1).toList();
+    final xp = shown.fold<int>(0, (sum, n) => sum + n.xpReward);
     return QuizInfoCard(
       icon: Icons.flash_on,
       iconColor: const Color(0xFFFF8F00),
@@ -466,8 +467,4 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
       ),
     );
   }
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

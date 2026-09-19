@@ -18,8 +18,8 @@ class QuizStageBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playable = node.isPlayableToday && !node.isCompletedToday;
-    final completed = node.isCompletedToday;
+    final completed = node.isDone;
+    final playable = node.isPlayableToday && !completed;
 
     return Container(
       decoration: const BoxDecoration(
@@ -205,7 +205,7 @@ class QuizStageBottomSheet extends StatelessWidget {
                             ? 'Lihat Hasil'
                             : playable
                             ? 'Mulai Tantangan'
-                            : 'Terkunci — mainkan babak hari ini',
+                            : 'Terkunci — selesaikan babak sebelumnya',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
