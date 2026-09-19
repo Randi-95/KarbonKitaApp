@@ -93,8 +93,9 @@ Proyek ini menggunakan **Laravel Sanctum** sebagai standar autentikasi API. Sanc
 ### C. Marketplace & Rewards (GET & POST)
 
 #### 1. Get Marketplace Vouchers (GET)
-* **Endpoint**: `GET /api/vouchers`
-* **Data**: List voucher UMKM yang tersedia untuk diklaim.
+* **Endpoint**: `GET /api/vouchers?category=kuliner`
+* **Query**: `category` opsional — `kuliner|sembako|fashion|jasa|donasi|transportasi`. Tanpa param = semua kategori. Nilai lain → 422.
+* **Data**: List voucher UMKM yang tersedia untuk diklaim (tiap item memuat `category`).
 
 #### 2. Klaim Voucher Reward (POST)
 * **Endpoint**: `POST /api/vouchers/claim`

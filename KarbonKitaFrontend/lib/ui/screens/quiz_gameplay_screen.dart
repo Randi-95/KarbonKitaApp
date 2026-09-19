@@ -1,21 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../bloc/auth/auth_bloc.dart';
-import '../../bloc/auth/auth_event.dart';
-import '../../bloc/quiz/quiz_bloc.dart';
-import '../../bloc/quiz/quiz_event.dart';
-import '../../bloc/quiz/quiz_state.dart';
-import '../../models/daily_quiz.dart';
+import '../../../bloc/auth/auth_bloc.dart';
+import '../../../bloc/auth/auth_event.dart';
+import '../../../bloc/quiz/quiz_bloc.dart';
+import '../../../bloc/quiz/quiz_event.dart';
+import '../../../bloc/quiz/quiz_state.dart';
+import '../../../models/daily_quiz.dart';
+import '../../../models/quiz_session.dart';
 import '../widgets/quiz/quiz_answer_option.dart';
 import '../widgets/quiz/quiz_feedback_card.dart';
+import '../widgets/quiz/quiz_progress_segments.dart';
 
-/// Halaman gameplay kuis harian: 1 soal dari backend per hari.
-/// Jawab benar → +XP; salah boleh coba lagi sampai benar.
+/// Halaman gameplay sesi 1 node: 5 soal berurutan dari backend.
+/// Benar = +XP lanjut; salah = hangus (0 XP) lanjut. Tanpa retry.
 class QuizGameplayScreen extends StatefulWidget {
-  final DailyQuiz quiz;
+  final int missionId;
+  final String nodeTitle;
+  final int totalXp;
 
-  const QuizGameplayScreen({super.key, required this.quiz});
+  const QuizGameplayScreen({
+    super.key,
+    required this.missionId,
+    required this.nodeTitle,
+    required this.totalXp,
+  });
 
   @override
   State<QuizGameplayScreen> createState() => _QuizGameplayScreenState();
@@ -29,15 +38,20 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<QuizBloc>().add(const DailyQuizLoaded());
+        context.read<QuizBloc>().add(NodeSessionLoaded(widget.missionId));
       }
     });
   }
 
-  void _submit(DailyQuiz quiz) {
+  void _submit() {
     final label = _selectedLabel;
     if (label == null) return;
     context.read<QuizBloc>().add(QuizAnswered(label));
+  }
+
+  void _next() {
+    setState(() => _selectedLabel = null);
+    context.read<QuizBloc>().add(const SessionQuestionNext());
   }
 
   @override
@@ -46,12 +60,22 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
       body: BlocListener<QuizBloc, QuizState>(
         listenWhen: (prev, curr) =>
             (!prev.isUnauthorized && curr.isUnauthorized) ||
+            (prev.sessionErrorMessage != curr.sessionErrorMessage &&
+                curr.sessionErrorMessage != null) ||
             (prev.errorMessage != curr.errorMessage &&
                 curr.errorMessage != null) ||
             prev.lastResult != curr.lastResult,
         listener: (context, state) {
           if (state.isUnauthorized) {
             context.read<AuthBloc>().add(const LoggedOut());
+          } else if (state.sessionErrorMessage != null &&
+              state.session == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.sessionErrorMessage!),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           } else if (state.errorMessage != null && state.lastResult == null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -60,8 +84,7 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
               ),
             );
           }
-          // Jawaban salah → buka kunci pilihan agar bisa coba lagi.
-          if (state.lastResult != null && !state.lastResult!.isCorrect) {
+          if (state.lastResult == null) {
             setState(() => _selectedLabel = null);
           }
         },
@@ -78,13 +101,12 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
             SafeArea(
               child: BlocBuilder<QuizBloc, QuizState>(
                 builder: (context, state) {
-                  // Pakai kuis terbaru dari bloc bila ada, fallback ke awal.
-                  final quiz = state.quiz ?? widget.quiz;
+                  final session = state.session;
                   final isBusy = state.status == QuizStatus.answering;
 
-                  if ((state.status == QuizStatus.loading ||
-                          state.status == QuizStatus.initial) &&
-                      state.quiz == null) {
+                  if ((state.sessionStatus == SessionStatus.loading ||
+                          state.sessionStatus == SessionStatus.initial) &&
+                      session == null) {
                     return const Center(
                       child: CircularProgressIndicator(
                         color: Color(0xFF43A047),
@@ -92,7 +114,8 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
                     );
                   }
 
-                  if (state.status == QuizStatus.error && state.quiz == null) {
+                  if (state.sessionStatus == SessionStatus.error &&
+                      session == null) {
                     return Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -106,14 +129,17 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              state.errorMessage ?? 'Gagal memuat kuis.',
+                              state.sessionErrorMessage ?? 'Gagal memuat soal.',
                               textAlign: TextAlign.center,
                               style: const TextStyle(color: Colors.black54),
                             ),
                             const SizedBox(height: 12),
                             ElevatedButton(
                               onPressed: () => context.read<QuizBloc>().add(
-                                const DailyQuizLoaded(force: true),
+                                NodeSessionLoaded(
+                                  widget.missionId,
+                                  force: true,
+                                ),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF43A047),
@@ -127,122 +153,29 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
                     );
                   }
 
+                  if (session == null) {
+                    return const SizedBox.shrink();
+                  }
+
+                  // Sesi selesai (semua terjawab) -> ringkasan.
+                  if (session.isFinished && state.lastResult == null) {
+                    return _buildSummary(context, session);
+                  }
+
+                  final idx = state.sessionIndex.clamp(
+                    0,
+                    session.questions.length - 1,
+                  );
+                  final question = session.questions[idx];
                   final result = state.lastResult;
-                  final completed = quiz.isCompletedToday && result == null;
-                  final justCorrect = result != null && result.isCorrect;
-                  final locked = isBusy || completed || justCorrect;
 
-                  // Kunci jawaban terungkap bila sudah selesai / baru benar.
-                  final revealed = (completed || justCorrect)
-                      ? quiz.correctAnswer
-                      : null;
-
-                  return Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: _buildHeader(quiz),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.07),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 5),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: const Color(0xFF43A047),
-                                          width: 2,
-                                        ),
-                                        color: const Color(0xFFE8F5E9),
-                                      ),
-                                      child: const Icon(
-                                        Icons.eco,
-                                        color: Color(0xFF43A047),
-                                        size: 24,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        quiz.question,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black87,
-                                          height: 1.45,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                ...List.generate(quiz.options.length, (i) {
-                                  final opt = quiz.options[i];
-                                  final isRevealed =
-                                      revealed != null && opt.label == revealed;
-                                  return Padding(
-                                    padding: EdgeInsets.only(
-                                      bottom: i == quiz.options.length - 1
-                                          ? 0
-                                          : 10,
-                                    ),
-                                    child: QuizAnswerOptionTile(
-                                      option: opt,
-                                      selected:
-                                          isRevealed ||
-                                          _selectedLabel == opt.label,
-                                      locked: locked,
-                                      onTap: () => setState(
-                                        () => _selectedLabel = opt.label,
-                                      ),
-                                    ),
-                                  );
-                                }),
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 250),
-                                  child: _buildFeedback(
-                                    quiz: quiz,
-                                    completed: completed,
-                                    justCorrect: justCorrect,
-                                    result: result,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      _buildBottomBar(
-                        quiz: quiz,
-                        isBusy: isBusy,
-                        completed: completed,
-                        justCorrect: justCorrect,
-                        hasResult: result != null,
-                      ),
-                    ],
+                  return _buildQuestion(
+                    context,
+                    session: session,
+                    index: idx,
+                    question: question,
+                    result: result,
+                    isBusy: isBusy,
                   );
                 },
               ),
@@ -253,7 +186,138 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
     );
   }
 
-  Widget _buildHeader(DailyQuiz quiz) {
+  Widget _buildQuestion(
+    BuildContext context, {
+    required QuizSession session,
+    required int index,
+    required DailyQuiz question,
+    required QuizAnswerResult? result,
+    required bool isBusy,
+  }) {
+    final answered = question.isCompletedToday;
+    final justAnswered = result != null;
+    final locked = isBusy || answered || justAnswered;
+    final revealed = answered ? question.correctAnswer : null;
+    final answeredCount = session.questions
+        .where((q) => q.isCompletedToday)
+        .length;
+    final wrongIndexes = {
+      for (var i = 0; i < session.questions.length; i++)
+        if (session.questions[i].wasCorrect == false) i,
+    };
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: _buildHeader(session, index),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+          child: QuizProgressSegments(
+            total: session.questions.length,
+            answeredCount: answeredCount,
+            currentIndex: index,
+            incorrectIndexes: wrongIndexes,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.07),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF43A047),
+                            width: 2,
+                          ),
+                          color: const Color(0xFFE8F5E9),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF43A047),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          question.question,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ...List.generate(question.options.length, (i) {
+                    final opt = question.options[i];
+                    final isRevealed =
+                        revealed != null && opt.label == revealed;
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        bottom: i == question.options.length - 1 ? 0 : 10,
+                      ),
+                      child: QuizAnswerOptionTile(
+                        option: opt,
+                        selected: isRevealed || _selectedLabel == opt.label,
+                        locked: locked,
+                        onTap: () => setState(() => _selectedLabel = opt.label),
+                      ),
+                    );
+                  }),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: _buildFeedback(question: question, result: result),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        _buildBottomBar(
+          isBusy: isBusy,
+          hasResult: result != null,
+          canSubmit:
+              !isBusy && !justAnswered && !answered && _selectedLabel != null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader(QuizSession session, int index) {
     return Row(
       children: [
         Container(
@@ -280,7 +344,7 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                quiz.missionTitle,
+                widget.nodeTitle,
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -289,9 +353,9 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const Text(
-                'Kuis Harian • 1 soal',
-                style: TextStyle(fontSize: 12, color: Colors.black54),
+              Text(
+                'Soal ${index + 1} dari ${session.questions.length}',
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
               ),
             ],
           ),
@@ -309,7 +373,7 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
               const Icon(Icons.flash_on, color: Color(0xFF43A047), size: 16),
               const SizedBox(width: 4),
               Text(
-                '+${quiz.xpReward} XP',
+                '+${session.xpPerQuestion} XP',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -324,62 +388,41 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
   }
 
   Widget _buildFeedback({
-    required DailyQuiz quiz,
-    required bool completed,
-    required bool justCorrect,
+    required DailyQuiz question,
     required QuizAnswerResult? result,
   }) {
-    if (completed) {
-      if (quiz.explanation == null || quiz.explanation!.isEmpty) {
-        return const SizedBox.shrink();
-      }
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: QuizFeedbackCard(
-          key: const ValueKey('feedback_done'),
-          variant: QuizFeedbackVariant.correct,
-          title: 'Sudah Selesai Hari Ini',
-          explanation: quiz.explanation!,
-        ),
-      );
-    }
-    if (justCorrect && result != null) {
+    if (result == null) return const SizedBox.shrink();
+    if (result.isCorrect) {
+      final explanation = question.explanation;
       return Padding(
         padding: const EdgeInsets.only(top: 12),
         child: QuizFeedbackCard(
           key: const ValueKey('feedback_correct'),
           variant: QuizFeedbackVariant.correct,
           title: 'Benar! +${result.xpEarned} XP',
-          explanation: (quiz.explanation == null || quiz.explanation!.isEmpty)
-              ? 'Streak dan XP-mu bertambah. Kembali besok untuk soal baru!'
-              : quiz.explanation!,
+          explanation: (explanation == null || explanation.isEmpty)
+              ? 'Lanjut ke soal berikutnya!'
+              : explanation,
         ),
       );
     }
-    if (result != null && !result.isCorrect) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: QuizFeedbackCard(
-          key: ValueKey('feedback_wrong_${result.attemptsToday}'),
-          variant: QuizFeedbackVariant.incorrect,
-          explanation:
-              'Jawaban belum tepat. Pilih jawaban lain lalu kirim lagi — bisa coba sampai benar!',
-        ),
-      );
-    }
-    return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: QuizFeedbackCard(
+        key: ValueKey('feedback_wrong_${result.userMissionId}'),
+        variant: QuizFeedbackVariant.incorrect,
+        title: 'Soal Hangus!',
+        explanation:
+            'Jawaban belum tepat dan soal ini tidak bisa diulang hari ini. Lanjut ke soal berikutnya!',
+      ),
+    );
   }
 
   Widget _buildBottomBar({
-    required DailyQuiz quiz,
     required bool isBusy,
-    required bool completed,
-    required bool justCorrect,
     required bool hasResult,
+    required bool canSubmit,
   }) {
-    final canSubmit =
-        !isBusy && !completed && !justCorrect && _selectedLabel != null;
-
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
@@ -397,10 +440,10 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
       child: SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: (completed || justCorrect)
-              ? () => Navigator.of(context).pop()
+          onPressed: hasResult
+              ? _next
               : canSubmit
-              ? () => _submit(quiz)
+              ? _submit
               : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF2E7D32),
@@ -426,11 +469,7 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
                 )
               else
                 Text(
-                  (completed || justCorrect)
-                      ? 'Selesai'
-                      : hasResult
-                      ? 'Kirim Lagi'
-                      : 'Kirim Jawaban',
+                  hasResult ? 'Lanjut' : 'Kirim Jawaban',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -442,6 +481,139 @@ class _QuizGameplayScreenState extends State<QuizGameplayScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSummary(BuildContext context, QuizSession session) {
+    final correct = session.questions.where((q) => q.wasCorrect == true).length;
+    final wrong = session.questions.where((q) => q.wasCorrect == false).length;
+    final xp = correct * session.xpPerQuestion;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: _buildHeader(session, session.questions.length - 1),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.07),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE8F5E9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.emoji_events,
+                      color: Color(0xFFFF8F00),
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Babak Selesai!',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$correct dari ${session.questions.length} benar',
+                    style: const TextStyle(fontSize: 14, color: Colors.black54),
+                  ),
+                  if (wrong > 0)
+                    Text(
+                      '$wrong soal hangus',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFEF6C00),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '+$xp XP',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Kembali besok untuk babak baru!',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E7D32),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Selesai',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -10,10 +10,12 @@ class VoucherRemoteDatasource {
 
   final DioClient _client;
 
-  /// GET /api/vouchers
+  /// GET /api/vouchers[?category=...]
   /// Return list voucher aktif, stok tersedia, belum kedaluwarsa.
-  Future<List<Voucher>> fetchVouchers() async {
-    final envelope = await _client.get(ApiEndpoints.vouchers);
+  Future<List<Voucher>> fetchVouchers({String? category}) async {
+    final envelope = await _client.get(
+      ApiEndpoints.vouchersQuery(category: category),
+    );
     final data = envelope['data'];
     if (data is List) {
       return data

@@ -3,9 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
+import '../../bloc/dashboard/dashboard_bloc.dart';
+import '../../bloc/dashboard/dashboard_state.dart';
 import '../../bloc/quiz/quiz_bloc.dart';
 import '../../bloc/quiz/quiz_event.dart';
 import '../../bloc/quiz/quiz_state.dart';
+import '../../models/quiz_node.dart';
 import '../../models/quiz_stage.dart';
 import '../widgets/quiz/quiz_info_card.dart';
 import '../widgets/quiz/quiz_level_header.dart';
@@ -15,7 +18,8 @@ import '../widgets/quiz/quiz_stage_node.dart';
 
 /// Halaman Level Kuis bergaya gamifikasi (Duolingo-like).
 /// Dibuka via Floating Widget kuis (FABKuis) dengan full-screen push.
-/// Peta babak dekoratif; soal asli 1/hari dari backend via QuizBloc.
+/// Daftar node (1 node = 1 misi quiz) dimuat dari backend via QuizBloc;
+/// tepat 1 node playable per hari, sisanya locked.
 class QuizLevelScreen extends StatefulWidget {
   const QuizLevelScreen({super.key});
 
@@ -30,43 +34,38 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<QuizBloc>().add(const DailyQuizLoaded());
+        context.read<QuizBloc>().add(const SagaNodesLoaded());
       }
     });
   }
 
-  QuizStage _stage(int number) =>
-      QuizLevelData.stages.firstWhere((s) => s.number == number);
+  /// Petakan node backend ke model tampilan stage.
+  QuizStage _stageFor(QuizNode node) {
+    final status = node.isCompletedToday
+        ? QuizStageStatus.completed
+        : node.isPlayableToday
+        ? QuizStageStatus.active
+        : QuizStageStatus.locked;
+    return QuizStage(
+      number: node.position,
+      tag: 'BABAK ${node.position}',
+      title: node.title,
+      description: node.description,
+      questionCount: node.quizzesCount,
+      status: status,
+    );
+  }
 
-  void _onNodeTap(BuildContext context, QuizStage stage) {
-    switch (stage.status) {
-      case QuizStageStatus.active:
-        final quiz = context.read<QuizBloc>().state.quiz;
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => QuizStageBottomSheet(stage: stage, quiz: quiz),
-        );
-        break;
-      case QuizStageStatus.locked:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Selesaikan ${QuizLevelData.stages.firstWhere((s) => s.status == QuizStageStatus.active, orElse: () => stage).tag} dulu untuk membuka ${stage.tag}!',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        break;
-      case QuizStageStatus.completed:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${stage.tag} sudah selesai. Kerja bagus!'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        break;
-    }
+  void _onNodeTap(BuildContext context, QuizNode node) {
+    final stage = _stageFor(node);
+    // Semua node bisa dibuka untuk lihat deskripsi; hanya playable
+    // yang bisa dimainkan (diatur di bottom sheet).
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => QuizStageBottomSheet(stage: stage, node: node),
+    );
   }
 
   @override
@@ -81,11 +80,16 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: QuizLevelHeader(
-                  title: QuizLevelData.levelTitle,
-                  userPoints: QuizLevelData.userPoints,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: BlocBuilder<DashboardBloc, DashboardState>(
+                  builder: (context, dashState) {
+                    final points = dashState.dashboard?.user.ecoPoints ?? 0;
+                    return QuizLevelHeader(
+                      title: QuizLevelData.levelTitle,
+                      userPoints: points,
+                    );
+                  },
                 ),
               ),
               Padding(
@@ -95,173 +99,251 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
                 ),
               ),
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = constraints.maxWidth;
-                      return SizedBox(
-                        height: 720,
-                        width: w,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: CustomPaint(painter: QuizPathPainter()),
-                            ),
-                            // Panah latar dekoratif.
-                            Positioned(
-                              left: w * 0.16,
-                              top: 150,
-                              child: Icon(
-                                Icons.arrow_upward,
-                                size: 44,
-                                color: const Color(
-                                  0xFF1B5E20,
-                                ).withValues(alpha: 0.08),
-                              ),
-                            ),
-                            Positioned(
-                              right: w * 0.12,
-                              top: 210,
-                              child: Icon(
-                                Icons.arrow_upward,
-                                size: 54,
-                                color: const Color(
-                                  0xFF1B5E20,
-                                ).withValues(alpha: 0.08),
-                              ),
-                            ),
-                            // Kartu hadiah di ujung jalur (atas).
-                            Positioned(
-                              top: 6,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: QuizInfoCard(
-                                  icon: Icons.monetization_on,
-                                  iconColor: const Color(0xFFFF8F00),
-                                  iconBgColor: const Color(0xFFFFF3E0),
-                                  title: 'Hadiah Spesial',
-                                  titleHighlight: null,
-                                  subtitle:
-                                      '${QuizLevelData.rewardPoints} Poin',
-                                  maxWidth: 210,
-                                ),
-                              ),
-                            ),
-                            // Node 5 (locked) — atas.
-                            Positioned(
-                              top: 96,
-                              left: w * 0.36,
-                              child: QuizStageNode(
-                                stage: _stage(5),
-                                onTap: () => _onNodeTap(context, _stage(5)),
-                              ),
-                            ),
-                            // Kartu motivasi kiri.
-                            Positioned(
-                              top: 228,
-                              left: 12,
-                              child: QuizInfoCard(
-                                icon: Icons.recycling,
-                                iconColor: const Color(0xFF43A047),
-                                iconBgColor: const Color(0xFFE8F5E9),
-                                subtitle: 'Terus belajar,\nselamatkan bumi!',
-                                maxWidth: 150,
-                              ),
-                            ),
-                            // Node 4 (locked) — kanan tengah.
-                            Positioned(
-                              top: 236,
-                              left: w * 0.55,
-                              child: QuizStageNode(
-                                stage: _stage(4),
-                                onTap: () => _onNodeTap(context, _stage(4)),
-                              ),
-                            ),
-                            // Node 3 (aktif) + tooltip.
-                            Positioned(
-                              top: 372,
-                              left: w * 0.30,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const QuizActiveTooltip(),
-                                  const SizedBox(height: 2),
-                                  QuizStageNode(
-                                    stage: _stage(3),
-                                    onTap: () => _onNodeTap(context, _stage(3)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Kartu motivasi kanan.
-                            Positioned(
-                              top: 420,
-                              right: 12,
-                              child: QuizInfoCard(
-                                icon: Icons.lightbulb_outline,
-                                iconColor: const Color(0xFFFFA000),
-                                iconBgColor: const Color(0xFFFFF8E1),
-                                subtitle:
-                                    'Setiap jawaban\nmembawamu ke\nmasa depan yang\nlebih hijau!',
-                                maxWidth: 150,
-                              ),
-                            ),
-                            // Node 2 & 1 (completed) — bawah.
-                            Positioned(
-                              top: 540,
-                              left: w * 0.52,
-                              child: QuizStageNode(
-                                stage: _stage(2),
-                                onTap: () => _onNodeTap(context, _stage(2)),
-                              ),
-                            ),
-                            Positioned(
-                              top: 600,
-                              left: w * 0.28,
-                              child: QuizStageNode(
-                                stage: _stage(1),
-                                onTap: () => _onNodeTap(context, _stage(1)),
-                              ),
-                            ),
-                            // Kartu hadiah kecil dekoratif kiri bawah.
-                            Positioned(
-                              bottom: 8,
-                              left: 12,
-                              child: Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.07,
-                                      ),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.card_giftcard,
-                                  color: Color(0xFF43A047),
-                                  size: 22,
-                                ),
-                              ),
-                            ),
-                          ],
+                child: BlocBuilder<QuizBloc, QuizState>(
+                  builder: (context, state) {
+                    if (state.nodesStatus == SagaNodesStatus.loading ||
+                        state.nodesStatus == SagaNodesStatus.initial) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF43A047),
                         ),
                       );
-                    },
-                  ),
+                    }
+                    if (state.nodesStatus == SagaNodesStatus.error) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.cloud_off,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                state.nodesErrorMessage ??
+                                    'Gagal memuat peta saga.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton(
+                                onPressed: () => context.read<QuizBloc>().add(
+                                  const SagaNodesLoaded(force: true),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF43A047),
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Coba Lagi'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    final nodes = [...state.nodes]
+                      ..sort((a, b) => a.position.compareTo(b.position));
+                    if (nodes.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'Belum ada babak kuis.',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      );
+                    }
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          return SizedBox(
+                            height: _mapHeight(nodes.length),
+                            width: w,
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: CustomPaint(
+                                    painter: QuizPathPainter(),
+                                  ),
+                                ),
+                                // Panah latar dekoratif.
+                                Positioned(
+                                  left: w * 0.16,
+                                  top: 150,
+                                  child: Icon(
+                                    Icons.arrow_upward,
+                                    size: 44,
+                                    color: const Color(
+                                      0xFF1B5E20,
+                                    ).withValues(alpha: 0.08),
+                                  ),
+                                ),
+                                Positioned(
+                                  right: w * 0.12,
+                                  top: 210,
+                                  child: Icon(
+                                    Icons.arrow_upward,
+                                    size: 54,
+                                    color: const Color(
+                                      0xFF1B5E20,
+                                    ).withValues(alpha: 0.08),
+                                  ),
+                                ),
+                                // Kartu hadiah di ujung jalur (atas).
+                                Positioned(
+                                  top: 6,
+                                  left: 0,
+                                  right: 0,
+                                  child: Center(child: _buildRewardCard(nodes)),
+                                ),
+                                // Node dari backend: posisi teratas = position terbesar.
+                                ..._buildNodeWidgets(context, nodes, w),
+                                // Kartu motivasi kiri.
+                                Positioned(
+                                  top: 228,
+                                  left: 12,
+                                  child: QuizInfoCard(
+                                    icon: Icons.recycling,
+                                    iconColor: const Color(0xFF43A047),
+                                    iconBgColor: const Color(0xFFE8F5E9),
+                                    subtitle:
+                                        'Terus belajar,\nselamatkan bumi!',
+                                    maxWidth: 150,
+                                  ),
+                                ),
+                                // Kartu motivasi kanan.
+                                Positioned(
+                                  top: 420,
+                                  right: 12,
+                                  child: QuizInfoCard(
+                                    icon: Icons.lightbulb_outline,
+                                    iconColor: const Color(0xFFFFA000),
+                                    iconBgColor: const Color(0xFFFFF8E1),
+                                    subtitle:
+                                        'Setiap jawaban\nmembawamu ke\nmasa depan yang\nlebih hijau!',
+                                    maxWidth: 150,
+                                  ),
+                                ),
+                                // Kartu hadiah kecil dekoratif kiri bawah.
+                                Positioned(
+                                  bottom: 8,
+                                  left: 12,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.07,
+                                          ),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.card_giftcard,
+                                      color: Color(0xFF43A047),
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  double _mapHeight(int count) => 140.0 + count * 116.0;
+
+  /// Top tiap slot diukur dari bawah (slot 0 = paling bawah, untuk position 1).
+  /// Layout klasik 5 node dipertahankan agar pas dengan jalur lukis;
+  /// jumlah lain diratakan dinamis supaya tidak ter-clip di luar peta.
+  List<double> _slotTops(int count) {
+    if (count == 5) return const [600.0, 540.0, 372.0, 236.0, 96.0];
+    final height = _mapHeight(count);
+    if (count == 1) return [height - 200.0];
+    final step = (height - 220.0) / (count - 1);
+    return List.generate(count, (k) => height - 120.0 - k * step);
+  }
+
+  /// Slot zig-zag untuk tiap node (dari bawah ke atas).
+  List<Widget> _buildNodeWidgets(
+    BuildContext context,
+    List<QuizNode> nodes,
+    double w,
+  ) {
+    const leftFractions = [0.28, 0.52, 0.30, 0.55, 0.36, 0.45];
+    final tops = _slotTops(nodes.length);
+    final widgets = <Widget>[];
+    for (var i = 0; i < nodes.length; i++) {
+      // Node position kecil di bawah, besar di atas.
+      final node = nodes[i];
+      final top = tops[i];
+      final left = w * leftFractions[i % leftFractions.length];
+      final stage = _stageFor(node);
+      if (stage.status == QuizStageStatus.active) {
+        widgets.add(
+          Positioned(
+            top: top - 58,
+            left: left - 20,
+            child: const QuizActiveTooltip(),
+          ),
+        );
+        widgets.add(
+          Positioned(
+            top: top,
+            left: left,
+            child: QuizStageNode(
+              stage: stage,
+              onTap: () => _onNodeTap(context, node),
+            ),
+          ),
+        );
+      } else {
+        widgets.add(
+          Positioned(
+            top: top,
+            left: left,
+            child: QuizStageNode(
+              stage: stage,
+              onTap: () => _onNodeTap(context, node),
+            ),
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+
+  /// Kartu hadiah jujur: XP babak hari ini, bukan poin fiktif.
+  Widget _buildRewardCard(List<QuizNode> nodes) {
+    final playable =
+        nodes.where((n) => n.isPlayableToday).firstOrNull ?? nodes.firstOrNull;
+    final xp = playable?.xpReward ?? 0;
+    return QuizInfoCard(
+      icon: Icons.flash_on,
+      iconColor: const Color(0xFFFF8F00),
+      iconBgColor: const Color(0xFFFFF3E0),
+      title: 'Hadiah Hari Ini',
+      titleHighlight: null,
+      subtitle: '+$xp XP',
+      maxWidth: 210,
     );
   }
 
@@ -384,4 +466,8 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
       ),
     );
   }
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }

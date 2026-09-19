@@ -2,7 +2,7 @@
   "info": {
     "name": "KarbonKita API",
     "_postman_id": "karbonkita-api-collection",
-    "description": "## Cara pakai (wajib)\n1. Import BOTH files ke Postman: KarbonKita_API.postman_collection.json DAN KarbonKita.postman_environment.json.\n2. Pilih environment \"KarbonKita Local\" di dropdown kanan atas (JANGAN pakai No Environment).\n3. Semua token/variable terisi OTOMATIS via test script (pm.environment). Jangan isi manual.\n4. Kalau request 401 padahal sudah login: pastikan environment \"KarbonKita Local\" yang aktif, bukan environment lain.\n\nAPI Collection for KarbonKita - Aksi kecil, dampak besar\n\n## Authentication\nAll protected endpoints require Bearer Token: Authorization: Bearer {{auth_token}}\n\n## Base URL\n{{base_url}} = http://localhost:8000\n\n## Flow\n1. Register / Login -> token auto-saved to auth_token\n2. Use protected endpoints\n3. Saga: GET /saga/quizzes -> POST /saga/answer (A/B/C/D) -> GET again shows completed\n\n## Security Notes\n- Timezone streak: Asia/Jakarta (WIB)\n- Quiz: 1 random per hari, retry until correct, XP only (no eco_points). WRONG answer does NOT leak correct_answer/explanation (anti-cheat). Correct answer only visible via GET after verified (is_completed_today=true) or via DB seeder QuizSeeder.php.\n- Throttle: POST /saga/answer limited 10 req/min (anti brute-force)\n- Vouchers: DB::transaction + lockForUpdate, seeded mitra kopilokal@example.com\n- Task 0 (Fase 4 fondasi): role middleware + AdminSeeder. Login admin di atas untuk isi admin_token.\n- Task 2 (Fase 4): folder Merchant (dashboard + toggle). Setup login kopilokal dulu untuk mitra_token.\n- Task 3 (Fase 4): redeem QR di folder Merchant (butuh qr_token dari claim + mitra_token).\n- Task 4 (Fase 4): folder Admin (pending + verify, pakai admin_token). Setup register mitra fresh untuk bahan verify.\n\n## End-to-end Fase 4 (jalankan berurutan)\n1. Authentication > Register/Login warga (auth_token) dan Login Admin (admin_token)\n2. Marketplace > Claim Voucher - Success (isi qr_token otomatis)\n3. Merchant > Setup Login Mitra (mitra_token) > Dashboard > Redeem Success > Double 409\n4. Admin > Setup Register Mitra > Pending List (salin id mitra_profile ke pending_mitra_id) > Approve > Re-verify 409\n5. Mitra yang di-approve bisa langsung redeem (langkah 3).",
+    "description": "## Cara pakai (wajib)\n1. Import BOTH files ke Postman: KarbonKita_API.postman_collection.json DAN KarbonKita.postman_environment.json.\n2. Pilih environment \"KarbonKita Local\" di dropdown kanan atas (JANGAN pakai No Environment).\n3. Semua token/variable terisi OTOMATIS via test script (pm.environment). Jangan isi manual.\n4. Kalau request 401 padahal sudah login: pastikan environment \"KarbonKita Local\" yang aktif, bukan environment lain.\n\nAPI Collection for KarbonKita - Aksi kecil, dampak besar\n\n## Authentication\nAll protected endpoints require Bearer Token: Authorization: Bearer {{auth_token}}\n\n## Base URL\n{{base_url}} = http://localhost:8000\n\n## Flow\n1. Register / Login -> token auto-saved to auth_token\n2. Use protected endpoints\n3. Saga: GET /saga/nodes (list peta, 1 playable/hari) -> GET /saga/nodes/{id}/questions (5 soal sesi) -> POST /saga/answer per soal (benar +XP, salah hangus) -> node selesai saat 5 terjawab\n\n## Security Notes\n- Timezone streak: Asia/Jakarta (WIB)\n- Quiz: sesi 5 soal per node playable/hari (deterministik per user+misi+tanggal). Benar = +xp_reward/5, salah = hangus (0 XP, 409 bila diulang). Node selesai saat 5 soal terjawab. WRONG answer does NOT leak correct_answer/explanation (anti-cheat). Kunci per soal hanya terlihat via GET questions setelah soal itu dijawab, atau via DB seeder QuizSeeder.php.\n- Throttle: POST /saga/answer limited 10 req/min (anti brute-force)\n- Vouchers: DB::transaction + lockForUpdate, seeded mitra kopilokal@example.com\n- Task 0 (Fase 4 fondasi): role middleware + AdminSeeder. Login admin di atas untuk isi admin_token.\n- Task 2 (Fase 4): folder Merchant (dashboard + toggle). Setup login kopilokal dulu untuk mitra_token.\n- Task 3 (Fase 4): redeem QR di folder Merchant (butuh qr_token dari claim + mitra_token).\n- Task 4 (Fase 4): folder Admin (pending + verify, pakai admin_token). Setup register mitra fresh untuk bahan verify.\n\n## End-to-end Fase 4 (jalankan berurutan)\n1. Authentication > Register/Login warga (auth_token) dan Login Admin (admin_token)\n2. Marketplace > Claim Voucher - Success (isi qr_token otomatis)\n3. Merchant > Setup Login Mitra (mitra_token) > Dashboard > Redeem Success > Double 409\n4. Admin > Setup Register Mitra > Pending List (salin id mitra_profile ke pending_mitra_id) > Approve > Re-verify 409\n5. Mitra yang di-approve bisa langsung redeem (langkah 3).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -1780,6 +1780,188 @@
           }
         },
         {
+          "name": "Get Saga Nodes - Success (List Peta, 1 Playable Per Day)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('Data is node array', function(){ var d=pm.response.json().data; pm.expect(d).to.be.an('array'); pm.expect(d.length).to.be.above(0); });",
+                  "pm.test('Node fields', function(){ var n=pm.response.json().data[0]; pm.expect(n).to.have.property('position'); pm.expect(n).to.have.property('quizzes_count'); pm.expect(n).to.have.property('is_playable_today'); pm.expect(n).to.have.property('is_completed_today'); });",
+                  "pm.test('Exactly 1 playable per day', function(){ var d=pm.response.json().data; var p=d.filter(function(n){return n.is_playable_today;}); pm.expect(p.length).to.eql(1); });",
+                  "pm.test('today_quiz_id only on playable (anti-leak)', function(){ var d=pm.response.json().data; d.forEach(function(n){ if(n.is_playable_today){ pm.expect(n).to.have.property('today_quiz_id'); } else { pm.expect(n).to.not.have.property('today_quiz_id'); } }); });",
+                  "var d=pm.response.json().data; var p=d.filter(function(n){return n.is_playable_today;})[0]; if(p && p.today_quiz_id){ pm.environment.set('quiz_id', p.today_quiz_id); pm.environment.set('playable_node_id', p.id); console.log('playable node id:'+p.id+' quiz_id saved:'+p.today_quiz_id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/saga/nodes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "nodes"
+              ]
+            },
+            "description": "List node peta Saga (1 node = 1 misi quiz). Tepat 1 node is_playable_today=true per hari (pemegang soal hari ini), sisanya locked. today_quiz_id hanya ada di node playable. Test script otomatis isi quiz_id dari node playable untuk request Answer di bawah."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Saga Nodes - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/saga/nodes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "nodes"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Node Questions - Success (5 Soal Sesi)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('5 questions, no leak', function(){ var d=pm.response.json().data; pm.expect(d.total).to.eql(5); pm.expect(d.questions.length).to.eql(5); pm.expect(d).to.have.property('xp_per_question'); });",
+                  "pm.test('Unanswered hides answer', function(){ var qs=pm.response.json().data.questions; qs.forEach(function(q){ if(!q.is_answered_today){ pm.expect(q).to.not.have.property('correct_answer'); } }); });",
+                  "var qs=pm.response.json().data.questions; var first=qs.filter(function(q){return !q.is_answered_today;})[0] || qs[0]; if(first){ pm.environment.set('quiz_id', first.id); console.log('session quiz_id saved:'+first.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/saga/nodes/{{playable_node_id}}/questions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "nodes",
+                "{{playable_node_id}}",
+                "questions"
+              ]
+            },
+            "description": "5 soal sesi hari ini untuk node playable (playable_node_id otomatis dari Get Saga Nodes). Soal belum dijawab menyembunyikan correct_answer. Test script isi quiz_id dengan soal pertama yang belum dijawab."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Node Questions - Fail (Locked Node 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403 or 404', function(){ pm.expect([403,404]).to.include(pm.response.code); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/saga/nodes/999999/questions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "nodes",
+                "999999",
+                "questions"
+              ]
+            },
+            "description": "Node tidak ada -> 404; node terkunci (bukan playable hari ini) -> 403. Contoh ini pakai id fiktif -> 404."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Node Questions - Fail (Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', function(){ pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/saga/nodes/{{playable_node_id}}/questions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "nodes",
+                "{{playable_node_id}}",
+                "questions"
+              ]
+            },
+            "description": "No token -> 401"
+          },
+          "response": []
+        },
+        {
           "name": "Get Daily Quiz - Success (1 Random Per Day)",
           "event": [
             {
@@ -2020,7 +2202,7 @@
           "response": []
         },
         {
-          "name": "Answer Quiz - Wrong Answer (Retry Allowed)",
+          "name": "Answer Quiz - Wrong Answer (Hangus, 0 XP)",
           "event": [
             {
               "listen": "test",
@@ -2074,7 +2256,52 @@
             "description": "Send wrong answer on purpose. Expect 200 is_correct:false, xp_earned 0, boleh retry. Tip: check correct_answer from DB or try A/B/C/D until correct. If this happens to be correct, status will be 200 is_correct:true instead."
           },
           "response": [],
-          "description": "Kirim jawaban SALAH. Response TIDAK mengandung correct_answer/explanation (anti-cheat, aman dari hacker). Expect 200 is_correct:false, xp_earned 0, boleh retry sampai benar. correct_answer hanya terlihat setelah verified via GET Daily Quiz After Completed (is_completed_today=true) atau lihat seeder QuizSeeder.php."
+          "description": "Kirim jawaban SALAH. Soal HANGUS: 0 XP, tidak bisa diulang hari ini (coba kirim lagi -> 409, lihat request berikut). Response TIDAK mengandung correct_answer/explanation (anti-cheat). Lanjut ke soal berikut di sesi (ambil quiz_id baru dari Get Node Questions)."
+        },
+        {
+          "name": "Answer Quiz - Repeat Same Question (Hangus 409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409 hangus', function(){ pm.response.to.have.status(409); });",
+                  "pm.test('Message already answered', function(){ pm.expect(pm.response.json().success).to.be.false; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": {{quiz_id}},\n  \"answer\": \"{{correct_answer}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/saga/answer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "saga",
+                "answer"
+              ]
+            },
+            "description": "Kirim ulang soal yang sama (bahkan dengan jawaban benar) -> 409 hangus. Jalankan setelah 'Wrong Answer' dengan quiz_id yang sama."
+          },
+          "response": []
         },
         {
           "name": "Answer Quiz - Success (Correct, XP Only)",
@@ -2120,10 +2347,10 @@
             "description": "Send correct answer (set correct_answer var manually from DB or from previous wrong response's correct_answer field, or from GET after completed). Expect XP only, no eco_points change. If correct_answer var empty, replace with A/B/C/D manually."
           },
           "response": [],
-          "description": "Kirim jawaban BENAR. correct_answer TIDAK bocor dari Wrong Answer (secure), jadi set variable correct_answer manual: lihat QuizSeeder.php mapping atau coba A/B/C/D (max 4 retry). Setelah Wrong, coba ganti correct_answer var sampai is_correct:true. Expect 200 is_correct:true + xp_earned. Jika 409, sudah completed hari ini -> jalankan Setup Fresh Quiz User."
+          "description": "Kirim jawaban BENAR untuk 1 soal sesi. Expect 200 is_correct:true + xp_earned = xp_reward/5 (10/8/6). Response bawa node_completed, remaining, session_correct, session_xp. Ulangi untuk tiap soal sesi (refresh quiz_id dari Get Node Questions) sampai node_completed=true."
         },
         {
-          "name": "Answer Quiz - Fail (Already Completed Today 409)",
+          "name": "Answer Quiz - Fail (Question Already Answered 409)",
           "event": [
             {
               "listen": "test",
@@ -2163,7 +2390,7 @@
                 "answer"
               ]
             },
-            "description": "After correct answer today, any further POST -> 409 You have already completed today. Test after 'Success' request."
+            "description": "Soal yang sudah dijawab hari ini (benar/salah) tidak bisa diulang -> 409. Berbeda dengan aturan lama (1 verified/hari): sekarang tiap soal sesi punya 409 sendiri. Test setelah menjawab quiz_id yang sama 2x."
           },
           "response": []
         },
@@ -2354,6 +2581,49 @@
               ]
             },
             "description": "List available vouchers (stock>0, is_active, not expired)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Marketplace Vouchers - Filter by Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function(){ pm.response.to.have.status(200); });",
+                  "pm.test('All items match category', function(){ var j=pm.response.json(); j.data.forEach(function(v){ pm.expect(v.category).to.eql('kuliner'); }); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/vouchers?category=kuliner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "vouchers"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "kuliner",
+                  "description": "kuliner|sembako|fashion|jasa|donasi|transportasi"
+                }
+              ]
+            },
+            "description": "Filter vouchers by category (invalid value -> 422)"
           },
           "response": []
         },

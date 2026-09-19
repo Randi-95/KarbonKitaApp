@@ -19,10 +19,17 @@ class VoucherController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'category' => 'sometimes|string|in:'.implode(',', Voucher::CATEGORIES),
+        ]);
+
         $vouchers = Voucher::with('mitraProfile.user')
             ->where('is_active', true)
             ->where('stock', '>', 0)
             ->where('expired_at', '>=', now()->toDateString())
+            ->when($request->get('category'), function ($query, $category) {
+                $query->where('category', $category);
+            })
             ->orderBy('created_at', 'desc')
             ->get();
 

@@ -1,7 +1,15 @@
 import '../../models/daily_quiz.dart';
+import '../../models/quiz_node.dart';
+import '../../models/quiz_session.dart';
 
 /// Status kuis harian.
 enum QuizStatus { initial, loading, loaded, answering, error }
+
+/// Status daftar node peta Saga.
+enum SagaNodesStatus { initial, loading, loaded, error }
+
+/// Status sesi soal 1 node.
+enum SessionStatus { initial, loading, loaded, error }
 
 class QuizState {
   const QuizState({
@@ -10,6 +18,13 @@ class QuizState {
     this.lastResult,
     this.errorMessage,
     this.isUnauthorized = false,
+    this.nodesStatus = SagaNodesStatus.initial,
+    this.nodes = const [],
+    this.nodesErrorMessage,
+    this.sessionStatus = SessionStatus.initial,
+    this.session,
+    this.sessionIndex = 0,
+    this.sessionErrorMessage,
   });
 
   final QuizStatus status;
@@ -22,6 +37,17 @@ class QuizState {
   /// True bila backend 401 — UI harus logout, bukan sekadar retry.
   final bool isUnauthorized;
 
+  /// Daftar node peta Saga (1 node = 1 misi quiz dari backend).
+  final SagaNodesStatus nodesStatus;
+  final List<QuizNode> nodes;
+  final String? nodesErrorMessage;
+
+  /// Sesi multi-soal node yang sedang dimainkan.
+  final SessionStatus sessionStatus;
+  final QuizSession? session;
+  final int sessionIndex;
+  final String? sessionErrorMessage;
+
   QuizState copyWith({
     QuizStatus? status,
     DailyQuiz? quiz,
@@ -29,6 +55,13 @@ class QuizState {
     bool clearResult = false,
     String? errorMessage,
     bool? isUnauthorized,
+    SagaNodesStatus? nodesStatus,
+    List<QuizNode>? nodes,
+    String? nodesErrorMessage,
+    SessionStatus? sessionStatus,
+    QuizSession? session,
+    int? sessionIndex,
+    String? sessionErrorMessage,
   }) {
     return QuizState(
       status: status ?? this.status,
@@ -36,6 +69,13 @@ class QuizState {
       lastResult: clearResult ? null : (lastResult ?? this.lastResult),
       errorMessage: errorMessage,
       isUnauthorized: isUnauthorized ?? this.isUnauthorized,
+      nodesStatus: nodesStatus ?? this.nodesStatus,
+      nodes: nodes ?? this.nodes,
+      nodesErrorMessage: nodesErrorMessage,
+      sessionStatus: sessionStatus ?? this.sessionStatus,
+      session: session ?? this.session,
+      sessionIndex: sessionIndex ?? this.sessionIndex,
+      sessionErrorMessage: sessionErrorMessage,
     );
   }
 }

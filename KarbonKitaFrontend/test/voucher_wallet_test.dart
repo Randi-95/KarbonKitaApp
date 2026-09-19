@@ -60,7 +60,7 @@ class FakeVoucherRepository extends VoucherRepository {
   Exception? error;
 
   @override
-  Future<List<Voucher>> getVouchers() async {
+  Future<List<Voucher>> getVouchers({String? category}) async {
     if (error != null) throw error!;
     return [Voucher.fromJson(_voucherJson)];
   }
@@ -190,6 +190,34 @@ void main() {
       bloc.add(const VoucherClaimSubmitted(5));
       await future;
       await bloc.close();
+    });
+
+    test('VouchersLoaded(category) -> vouchers + selectedCategory', () async {
+      final bloc = VoucherBloc(FakeVoucherRepository());
+      final future = expectLater(
+        bloc.stream,
+        emitsThrough(
+          predicate<VoucherState>(
+            (s) =>
+                s.status == VoucherStatus.loaded &&
+                s.selectedCategory == 'fashion' &&
+                s.vouchers.length == 1,
+          ),
+        ),
+      );
+      bloc.add(const VouchersLoaded(category: 'fashion'));
+      await future;
+      await bloc.close();
+    });
+
+    test('Voucher.fromJson tanpa category -> default kuliner', () {
+      final voucher = Voucher.fromJson(_voucherJson);
+      expect(voucher.category, 'kuliner');
+      final withCategory = Voucher.fromJson({
+        ..._voucherJson,
+        'category': 'donasi',
+      });
+      expect(withCategory.category, 'donasi');
     });
 
     test('401 dompet -> isUnauthorized (UI wajib logout)', () async {

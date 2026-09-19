@@ -23,7 +23,7 @@ class QuizStage {
 
 /// Data dummy Level 1 — diganti API/BLoC nanti.
 class QuizLevelData {
-  static const String levelTitle = 'Level 1: Literasi Sampah Plastik';
+  static const String levelTitle = 'Peta Saga';
   static const int userPoints = 1250;
   static const int rewardPoints = 500;
 

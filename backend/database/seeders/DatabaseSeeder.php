@@ -14,8 +14,10 @@ class DatabaseSeeder extends Seeder
             MissionSeeder::class,
             QuizSeeder::class,
             VoucherSeeder::class,
+            MarketplaceSeeder::class,
             DonationCampaignSeeder::class,
             UserMissionSeeder::class,
+            LeaderboardSeeder::class,
         ]);
     }
 }

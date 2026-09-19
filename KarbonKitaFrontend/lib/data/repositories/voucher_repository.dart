@@ -12,9 +12,10 @@ class VoucherRepository {
   final VoucherRemoteDatasource _remote;
 
   /// Ambil daftar voucher yang bisa diklaim dari backend.
-  Future<List<Voucher>> getVouchers() async {
+  /// [category] null = semua kategori.
+  Future<List<Voucher>> getVouchers({String? category}) async {
     try {
-      return await _remote.fetchVouchers();
+      return await _remote.fetchVouchers(category: category);
     } on VoucherException {
       rethrow;
     } catch (e) {

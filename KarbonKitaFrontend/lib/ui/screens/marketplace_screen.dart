@@ -17,8 +17,6 @@ class MarketplaceScreen extends StatefulWidget {
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
-  int _selectedCategoryIndex = 0;
-
   @override
   void initState() {
     super.initState();
@@ -341,64 +339,85 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Widget _buildCategoryChips() {
-    // Backend voucher tidak punya field kategori — semua item adalah
-    // voucher UMKM, jadi kedua chip menampilkan data yang sama.
-    const categories = [
-      {'label': 'Semua', 'icon': Icons.eco},
-      {'label': 'Voucher UMKM', 'icon': Icons.storefront},
-    ];
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(categories.length, (index) {
-          bool isSelected = _selectedCategoryIndex == index;
-          return Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedCategoryIndex = index;
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected ? Colors.green : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? Colors.green : Colors.grey.shade300,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      categories[index]['icon'] as IconData,
-                      color: isSelected ? Colors.white : Colors.grey.shade600,
-                      size: 16,
+    return BlocBuilder<VoucherBloc, VoucherState>(
+      buildWhen: (prev, curr) =>
+          prev.selectedCategory != curr.selectedCategory ||
+          prev.status != curr.status,
+      builder: (context, state) {
+        final loadingCategory = state.status == VoucherStatus.loading
+            ? state.selectedCategory
+            : null;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: List.generate(VoucherCategory.values.length, (index) {
+              final category = VoucherCategory.values[index];
+              final isSelected = state.selectedCategory == category.value;
+              final isLoadingThis = loadingCategory == category.value;
+              return Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: GestureDetector(
+                  onTap: isSelected
+                      ? null
+                      : () {
+                          context.read<VoucherBloc>().add(
+                            VouchersLoaded(category: category.value),
+                          );
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      categories[index]['label'] as String,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.grey.shade600,
-                        fontSize: 12,
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.green : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? Colors.green : Colors.grey.shade300,
                       ),
                     ),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isLoadingThis)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        else
+                          Icon(
+                            category.icon,
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.grey.shade600,
+                            size: 16,
+                          ),
+                        const SizedBox(width: 6),
+                        Text(
+                          category.label,
+                          style: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.grey.shade600,
+                            fontSize: 12,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          );
-        }),
-      ),
+              );
+            }),
+          ),
+        );
+      },
     );
   }
 
@@ -457,6 +476,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       buildWhen: (prev, curr) =>
           prev.status != curr.status ||
           prev.vouchers != curr.vouchers ||
+          prev.selectedCategory != curr.selectedCategory ||
           prev.claimStatus != curr.claimStatus ||
           prev.claimingVoucherId != curr.claimingVoucherId ||
           prev.ecoPoints != curr.ecoPoints,
@@ -476,7 +496,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         }
 
         if (state.vouchers.isEmpty) {
-          return _buildEmptyState();
+          return _buildEmptyState(state.selectedCategory);
         }
 
         return GridView.count(
@@ -522,7 +542,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: () {
-              context.read<VoucherBloc>().add(const VouchersLoaded());
+              final category = context
+                  .read<VoucherBloc>()
+                  .state
+                  .selectedCategory;
+              context.read<VoucherBloc>().add(
+                VouchersLoaded(category: category),
+              );
             },
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Coba Lagi'),
@@ -539,7 +565,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(String? category) {
+    String? label;
+    if (category != null) {
+      for (final c in VoucherCategory.values) {
+        if (c.value == category) {
+          label = c.label;
+          break;
+        }
+      }
+    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -560,7 +595,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           Icon(Icons.storefront_outlined, color: Colors.grey[400], size: 48),
           const SizedBox(height: 12),
           Text(
-            'Belum ada voucher tersedia',
+            label == null
+                ? 'Belum ada voucher tersedia'
+                : 'Belum ada voucher $label',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: Colors.grey[600]),
           ),

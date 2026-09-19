@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
-import '../../../models/daily_quiz.dart';
+import '../../../models/quiz_node.dart';
 import '../../../models/quiz_stage.dart';
 import '../../screens/quiz_gameplay_screen.dart';
 
-/// Bottom sheet detail babak aktif: ikon ?, tag, judul, deskripsi, CTA.
-/// Meneruskan kuis harian asli backend ke gameplay bila tersedia.
+/// Bottom sheet detail node saga.
+/// Playable: tombol main ke gameplay sesi. Locked/completed: mode baca-saja
+/// (lihat deskripsi, tombol disabled/tanpa navigasi main).
 class QuizStageBottomSheet extends StatelessWidget {
   final QuizStage stage;
-  final DailyQuiz? quiz;
+  final QuizNode node;
 
-  const QuizStageBottomSheet({super.key, required this.stage, this.quiz});
+  const QuizStageBottomSheet({
+    super.key,
+    required this.stage,
+    required this.node,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final playable = node.isPlayableToday && !node.isCompletedToday;
+    final completed = node.isCompletedToday;
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -122,33 +130,57 @@ class QuizStageBottomSheet extends StatelessWidget {
                   height: 1.5,
                 ),
               ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _MetaChip(
+                    icon: Icons.flash_on,
+                    label: '+${node.xpReward} XP',
+                  ),
+                  const SizedBox(width: 8),
+                  _MetaChip(
+                    icon: Icons.quiz,
+                    label:
+                        '${node.answeredToday}/${node.totalQuestions > 0 ? node.totalQuestions : node.quizzesCount} terjawab',
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    final dailyQuiz = quiz;
-                    if (dailyQuiz == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Kuis hari ini masih dimuat. Coba lagi sebentar.',
-                          ),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      return;
-                    }
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => QuizGameplayScreen(quiz: dailyQuiz),
-                      ),
-                    );
-                  },
+                  onPressed: playable
+                      ? () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => QuizGameplayScreen(
+                                missionId: node.id,
+                                nodeTitle: node.title,
+                                totalXp: node.xpReward,
+                              ),
+                            ),
+                          );
+                        }
+                      : completed
+                      ? () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => QuizGameplayScreen(
+                                missionId: node.id,
+                                nodeTitle: node.title,
+                                totalXp: node.xpReward,
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2E7D32),
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey[300],
+                    disabledForegroundColor: Colors.black54,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -160,16 +192,20 @@ class QuizStageBottomSheet extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        quiz?.isCompletedToday == true
+                        completed
                             ? Icons.visibility
-                            : Icons.play_arrow,
+                            : playable
+                            ? Icons.play_arrow
+                            : Icons.lock,
                         size: 20,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        quiz?.isCompletedToday == true
+                        completed
                             ? 'Lihat Hasil'
-                            : 'Mulai Tantangan',
+                            : playable
+                            ? 'Mulai Tantangan'
+                            : 'Terkunci — mainkan babak hari ini',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -182,6 +218,39 @@ class QuizStageBottomSheet extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _MetaChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F5E9),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF43A047)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2E7D32),
+            ),
+          ),
+        ],
       ),
     );
   }

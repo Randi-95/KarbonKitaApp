@@ -14,6 +14,7 @@ class VoucherState {
   const VoucherState({
     this.status = VoucherStatus.initial,
     this.vouchers = const [],
+    this.selectedCategory,
     this.ecoPoints,
     this.errorMessage,
     this.inventoryStatus = InventoryStatus.initial,
@@ -28,6 +29,10 @@ class VoucherState {
 
   final VoucherStatus status;
   final List<Voucher> vouchers;
+
+  /// Kategori aktif di marketplace, null = Semua.
+  /// Dipakai agar pull-to-refresh / retry memuat kategori yang sama.
+  final String? selectedCategory;
   final int? ecoPoints;
   final String? errorMessage;
 
@@ -43,9 +48,13 @@ class VoucherState {
   /// True bila backend 401 — UI harus logout, bukan sekadar retry.
   final bool isUnauthorized;
 
+  // Sentinel agar copyWith bisa me-reset selectedCategory ke null (chip 'Semua').
+  static const _noChange = Object();
+
   VoucherState copyWith({
     VoucherStatus? status,
     List<Voucher>? vouchers,
+    Object? selectedCategory = _noChange,
     int? ecoPoints,
     String? errorMessage,
     InventoryStatus? inventoryStatus,
@@ -61,6 +70,9 @@ class VoucherState {
     return VoucherState(
       status: status ?? this.status,
       vouchers: vouchers ?? this.vouchers,
+      selectedCategory: selectedCategory == _noChange
+          ? this.selectedCategory
+          : selectedCategory as String?,
       ecoPoints: ecoPoints ?? this.ecoPoints,
       errorMessage: errorMessage,
       inventoryStatus: inventoryStatus ?? this.inventoryStatus,

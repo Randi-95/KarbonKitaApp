@@ -17,6 +17,7 @@ class DailyQuiz {
     required this.xpReward,
     required this.correctAnswer,
     required this.explanation,
+    this.wasCorrect,
   });
 
   final int id;
@@ -27,6 +28,10 @@ class DailyQuiz {
   final int order;
   final bool isCompletedToday;
   final int xpReward;
+
+  /// Hasil soal ini dalam sesi (true=benar, false=hangus, null=belum dijawab).
+  /// Hanya diisi oleh `GET /api/saga/nodes/{id}/questions`.
+  final bool? wasCorrect;
 
   /// Kunci jawaban (A/B/C/D) — hanya ada bila sudah selesai hari ini.
   final String? correctAnswer;
@@ -46,6 +51,25 @@ class DailyQuiz {
       xpReward: _toInt(json['xp_reward']),
       correctAnswer: (json['correct_answer'] as String?)?.toUpperCase(),
       explanation: json['explanation'] as String?,
+    );
+  }
+
+  /// Parsing soal dalam sesi node: `is_answered_today` -> isCompletedToday,
+  /// `was_correct` opsional (null = belum dijawab).
+  factory DailyQuiz.fromSessionJson(Map<String, dynamic> json) {
+    final wasCorrect = json['was_correct'];
+    return DailyQuiz(
+      id: _toInt(json['id']),
+      missionId: _toInt(json['mission_id']),
+      missionTitle: '',
+      question: json['question'] as String? ?? '',
+      options: _parseOptions(json['options']),
+      order: _toInt(json['order']),
+      isCompletedToday: json['is_answered_today'] as bool? ?? false,
+      xpReward: 0,
+      correctAnswer: (json['correct_answer'] as String?)?.toUpperCase(),
+      explanation: json['explanation'] as String?,
+      wasCorrect: wasCorrect is bool ? wasCorrect : null,
     );
   }
 
@@ -86,6 +110,10 @@ class QuizAnswerResult {
     required this.streakDays,
     required this.attemptsToday,
     required this.userMissionId,
+    this.nodeCompleted = false,
+    this.remaining = 0,
+    this.sessionCorrect = 0,
+    this.sessionXp = 0,
   });
 
   final bool isCorrect;
@@ -96,6 +124,12 @@ class QuizAnswerResult {
   final int attemptsToday;
   final int userMissionId;
 
+  /// Progres sesi multi-soal (default aman untuk respons lama).
+  final bool nodeCompleted;
+  final int remaining;
+  final int sessionCorrect;
+  final int sessionXp;
+
   factory QuizAnswerResult.fromJson(Map<String, dynamic> json) {
     return QuizAnswerResult(
       isCorrect: json['is_correct'] as bool? ?? false,
@@ -105,6 +139,10 @@ class QuizAnswerResult {
       streakDays: _toInt(json['streak_days']),
       attemptsToday: _toInt(json['attempts_today']),
       userMissionId: _toInt(json['user_mission_id']),
+      nodeCompleted: json['node_completed'] as bool? ?? false,
+      remaining: _toInt(json['remaining']),
+      sessionCorrect: _toInt(json['session_correct']),
+      sessionXp: _toInt(json['session_xp']),
     );
   }
 
@@ -116,6 +154,10 @@ class QuizAnswerResult {
     'streak_days': streakDays,
     'attempts_today': attemptsToday,
     'user_mission_id': userMissionId,
+    'node_completed': nodeCompleted,
+    'remaining': remaining,
+    'session_correct': sessionCorrect,
+    'session_xp': sessionXp,
   };
 }
 

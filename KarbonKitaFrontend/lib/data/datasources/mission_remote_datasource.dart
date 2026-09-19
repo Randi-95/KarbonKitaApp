@@ -2,6 +2,8 @@ import '../../core/network/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../models/daily_quiz.dart';
 import '../../models/mission.dart';
+import '../../models/quiz_node.dart';
+import '../../models/quiz_session.dart';
 
 /// Akses mentah ke endpoint mission backend.
 class MissionRemoteDatasource {
@@ -32,6 +34,33 @@ class MissionRemoteDatasource {
       return DailyQuiz.fromJson(data);
     }
     throw const FormatException('Format kuis harian tidak dikenali.');
+  }
+
+  /// GET /api/saga/nodes
+  /// Return daftar node peta Saga (1 node = 1 misi quiz).
+  Future<List<QuizNode>> fetchSagaNodes() async {
+    final envelope = await _client.get(ApiEndpoints.sagaNodes);
+    final data = envelope['data'];
+    if (data is List) {
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(QuizNode.fromJson)
+          .toList();
+    }
+    throw const FormatException('Format daftar node saga tidak dikenali.');
+  }
+
+  /// GET /api/saga/nodes/{id}/questions
+  /// Return sesi 5 soal hari ini untuk 1 node playable.
+  Future<QuizSession> fetchNodeQuestions(int missionId) async {
+    final envelope = await _client.get(
+      ApiEndpoints.sagaNodeQuestions(missionId),
+    );
+    final data = envelope['data'];
+    if (data is Map<String, dynamic>) {
+      return QuizSession.fromJson(data);
+    }
+    throw const FormatException('Format sesi kuis tidak dikenali.');
   }
 
   /// GET /api/saga/quizzes (delegasi)

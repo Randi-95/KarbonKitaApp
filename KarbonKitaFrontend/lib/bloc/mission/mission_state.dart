@@ -14,21 +14,26 @@ class MissionState {
   });
 
   final MissionStatus status;
-  final List<Mission> missions;       // Semua misi aktif (mobility + waste)
-  final List<Mission> quizzes;        // Kuis harian dari Saga
+  final List<Mission> missions; // Semua misi aktif (mobility + waste)
+  final List<Mission> quizzes; // Kuis harian dari Saga
   final List<Mission> filteredMissions; // Hasil filter
-  final String? currentFilter;        // null = Semua, 'mobility', 'waste', 'quiz'
+  final String? currentFilter; // null = Semua, 'mobility', 'waste'
   final String? errorMessage;
 
-  /// Gabungan semua misi (untuk tab 'Semua')
-  List<Mission> get allMissions => [...missions, ...quizzes];
+  /// Semua misi non-kuis (untuk tab 'Semua'). Kuis hanya lewat FAB.
+  List<Mission> get allMissions => missions;
+
+  // Sentinel agar copyWith bisa me-reset currentFilter ke null (tab 'Semua').
+  // Tanpa ini, `currentFilter ?? this.currentFilter` tidak pernah bisa null
+  // lagi setelah user pindah tab.
+  static const _noChange = Object();
 
   MissionState copyWith({
     MissionStatus? status,
     List<Mission>? missions,
     List<Mission>? quizzes,
     List<Mission>? filteredMissions,
-    String? currentFilter,
+    Object? currentFilter = _noChange,
     String? errorMessage,
   }) {
     return MissionState(
@@ -36,15 +41,16 @@ class MissionState {
       missions: missions ?? this.missions,
       quizzes: quizzes ?? this.quizzes,
       filteredMissions: filteredMissions ?? this.filteredMissions,
-      currentFilter: currentFilter ?? this.currentFilter,
+      currentFilter: currentFilter == _noChange
+          ? this.currentFilter
+          : currentFilter as String?,
       errorMessage: errorMessage,
     );
   }
 
-  /// Filter missions berdasarkan kategori
+  /// Filter missions berdasarkan kategori (non-kuis saja)
   List<Mission> getFiltered(String? category) {
     if (category == null) return allMissions;
-    if (category == 'quiz') return quizzes;
     return allMissions.where((m) => m.category == category).toList();
   }
 }

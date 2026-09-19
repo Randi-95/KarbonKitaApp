@@ -20,9 +20,15 @@ class VoucherBloc extends Bloc<VoucherEvent, VoucherState> {
     VouchersLoaded event,
     Emitter<VoucherState> emit,
   ) async {
-    emit(state.copyWith(status: VoucherStatus.loading, errorMessage: null));
+    emit(
+      state.copyWith(
+        status: VoucherStatus.loading,
+        selectedCategory: event.category,
+        errorMessage: null,
+      ),
+    );
     try {
-      final vouchers = await _repository.getVouchers();
+      final vouchers = await _repository.getVouchers(category: event.category);
       final ecoPoints = await _repository.getEcoPoints();
       emit(
         state.copyWith(

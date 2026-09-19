@@ -19,13 +19,21 @@ class ApiEndpoints {
   static const String mobilitySync = '/missions/mobility-sync';
 
   // Saga (Quiz)
+  static const String sagaNodes = '/saga/nodes';
   static const String sagaQuizzes = '/saga/quizzes';
   static const String sagaAnswer = '/saga/answer';
+
+  static String sagaNodeQuestions(int missionId) =>
+      '$sagaNodes/$missionId/questions';
 
   // Marketplace (Voucher)
   static const String vouchers = '/vouchers';
   static const String vouchersClaim = '/vouchers/claim';
   static const String myVouchers = '/user/my-vouchers';
+
+  /// GET /api/vouchers, opsional filter `?category=kuliner|...`.
+  static String vouchersQuery({String? category}) =>
+      category == null ? vouchers : '$vouchers?category=$category';
 
   // Dashboard (saldo eco_points)
   static const String userDashboard = '/user/dashboard';

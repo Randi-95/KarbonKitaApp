@@ -136,6 +136,7 @@ class AdminDonationController extends Controller
                     'mitra_profile_id' => $mitra->id,
                     'title' => $validated['title'],
                     'description' => $validated['description'],
+                    'category' => $validated['category'] ?? 'kuliner',
                     'image_url' => $validated['image_url'] ?? null,
                     'points_cost' => $validated['points_cost'],
                     'rupiah_value' => $validated['rupiah_value'],

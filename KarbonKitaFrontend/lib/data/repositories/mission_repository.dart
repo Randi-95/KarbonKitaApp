@@ -3,6 +3,8 @@ import '../../core/network/mission_exception.dart';
 import '../datasources/mission_remote_datasource.dart';
 import '../../models/daily_quiz.dart';
 import '../../models/mission.dart';
+import '../../models/quiz_node.dart';
+import '../../models/quiz_session.dart';
 
 /// Orkestrasi data mission.
 class MissionRepository {
@@ -29,6 +31,40 @@ class MissionRepository {
       rethrow;
     } catch (e) {
       throw MissionException('Gagal memuat kuis harian: $e');
+    }
+  }
+
+  /// Ambil daftar node peta Saga dari backend.
+  Future<List<QuizNode>> getSagaNodes() async {
+    try {
+      return await _remote.fetchSagaNodes();
+    } on MissionException {
+      rethrow;
+    } on AuthException catch (e) {
+      throw MissionException(
+        e.message,
+        errors: e.errors,
+        statusCode: e.statusCode,
+      );
+    } catch (e) {
+      throw MissionException('Gagal memuat node saga: $e');
+    }
+  }
+
+  /// Ambil sesi soal 1 node dari backend.
+  Future<QuizSession> getNodeQuestions(int missionId) async {
+    try {
+      return await _remote.fetchNodeQuestions(missionId);
+    } on MissionException {
+      rethrow;
+    } on AuthException catch (e) {
+      throw MissionException(
+        e.message,
+        errors: e.errors,
+        statusCode: e.statusCode,
+      );
+    } catch (e) {
+      throw MissionException('Gagal memuat soal sesi: $e');
     }
   }
 

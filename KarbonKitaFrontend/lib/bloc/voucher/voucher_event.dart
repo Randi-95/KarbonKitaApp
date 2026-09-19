@@ -4,8 +4,11 @@ sealed class VoucherEvent {
 }
 
 /// Muat daftar voucher + saldo eco_points dari backend.
+/// [category] null = semua kategori.
 class VouchersLoaded extends VoucherEvent {
-  const VouchersLoaded();
+  const VouchersLoaded({this.category});
+
+  final String? category;
 }
 
 /// Muat inventaris dompet (active/used/expired) dari backend.
