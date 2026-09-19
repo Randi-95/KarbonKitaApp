@@ -1,5 +1,6 @@
 /// Node peta Saga dari `GET /api/saga/nodes` (1 node = 1 misi quiz).
-/// Tepat 1 node playable per hari, sisanya locked.
+/// Progres berurutan dari bawah: maksimal 2 node berikutnya yang belum
+/// selesai terbuka; skip sehari tidak menghanguskan progres.
 class QuizNode {
   const QuizNode({
     required this.id,
@@ -14,6 +15,7 @@ class QuizNode {
     required this.todayQuizId,
     this.totalQuestions = 0,
     this.answeredToday = 0,
+    this.isCompleted = false,
   });
 
   final int id;
@@ -25,6 +27,13 @@ class QuizNode {
   final int quizzesCount;
   final bool isCompletedToday;
   final bool isPlayableToday;
+
+  /// Pernah selesai (persisten). Node selesai tetap tampil selesai
+  /// meski sesi hari ini belum dikerjakan.
+  final bool isCompleted;
+
+  /// Selesai untuk tampilan: selesai hari ini atau pernah selesai.
+  bool get isDone => isCompletedToday || isCompleted;
 
   /// Jumlah soal sesi (5) dan yang sudah terjawab hari ini.
   final int totalQuestions;
@@ -44,6 +53,7 @@ class QuizNode {
       quizzesCount: _toInt(json['quizzes_count']),
       isCompletedToday: json['is_completed_today'] as bool? ?? false,
       isPlayableToday: json['is_playable_today'] as bool? ?? false,
+      isCompleted: json['is_completed'] as bool? ?? false,
       todayQuizId: json['today_quiz_id'] == null
           ? null
           : _toInt(json['today_quiz_id']),
@@ -61,6 +71,7 @@ class QuizNode {
     'position': position,
     'quizzes_count': quizzesCount,
     'is_completed_today': isCompletedToday,
+    'is_completed': isCompleted,
     'is_playable_today': isPlayableToday,
     'today_quiz_id': todayQuizId,
     'total_questions': totalQuestions,
