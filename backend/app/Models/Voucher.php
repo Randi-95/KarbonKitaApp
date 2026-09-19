@@ -11,10 +11,18 @@ class Voucher extends Model
 {
     use HasFactory;
 
+    /**
+     * Kategori voucher marketplace (sumber tunggal untuk validasi filter).
+     *
+     * @var array<int, string>
+     */
+    public const CATEGORIES = ['kuliner', 'sembako', 'fashion', 'jasa', 'donasi', 'transportasi'];
+
     protected $fillable = [
         'mitra_profile_id',
         'title',
         'description',
+        'category',
         'image_url',
         'points_cost',
         'rupiah_value',

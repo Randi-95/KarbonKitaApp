@@ -17,7 +17,7 @@ class QuizzesLoaded extends MissionEvent {
 class MissionsFiltered extends MissionEvent {
   const MissionsFiltered(this.category);
 
-  final String? category; // null = 'Semua', 'mobility', 'waste', 'quiz'
+  final String? category; // null = 'Semua', 'mobility', 'waste'
 }
 
 /// Sinkronisasi aktivitas mobilitas.
@@ -39,10 +39,7 @@ class MobilitySynced extends MissionEvent {
 
 /// Submit jawaban kuis.
 class QuizAnswerSubmitted extends MissionEvent {
-  const QuizAnswerSubmitted({
-    required this.quizId,
-    required this.answer,
-  });
+  const QuizAnswerSubmitted({required this.quizId, required this.answer});
 
   final int quizId;
   final String answer;

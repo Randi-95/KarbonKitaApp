@@ -20,6 +20,7 @@ class CreateFundedVoucherRequest extends FormRequest
             'mitra_profile_id' => ['required', 'integer', 'exists:mitra_profiles,id'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:2000'],
+            'category' => ['sometimes', 'string', 'in:kuliner,sembako,fashion,jasa,donasi,transportasi'],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'points_cost' => ['required', 'integer', 'min:0'],
             'rupiah_value' => ['required', 'integer', 'min:1000'],

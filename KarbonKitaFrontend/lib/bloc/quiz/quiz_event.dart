@@ -10,7 +10,27 @@ class DailyQuizLoaded extends QuizEvent {
   final bool force;
 }
 
-/// Kirim jawaban (label A/B/C/D) untuk kuis yang sedang tampil.
+/// Muat daftar node peta Saga dari backend.
+class SagaNodesLoaded extends QuizEvent {
+  const SagaNodesLoaded({this.force = false});
+
+  final bool force;
+}
+
+/// Muat sesi soal 1 node dari backend.
+class NodeSessionLoaded extends QuizEvent {
+  const NodeSessionLoaded(this.missionId, {this.force = false});
+
+  final int missionId;
+  final bool force;
+}
+
+/// Lanjut ke soal sesi berikutnya yang belum dijawab.
+class SessionQuestionNext extends QuizEvent {
+  const SessionQuestionNext();
+}
+
+/// Kirim jawaban (label A/B/C/D) untuk soal sesi yang sedang tampil.
 class QuizAnswered extends QuizEvent {
   const QuizAnswered(this.answer);
 

@@ -49,6 +49,11 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('leaderboard.index');
 
     // Saga Map (Quiz) — throttle brute-force on answer
+    Route::get('/saga/nodes', [SagaController::class, 'nodes'])
+        ->name('saga.nodes');
+    Route::get('/saga/nodes/{id}/questions', [SagaController::class, 'questions'])
+        ->whereNumber('id')
+        ->name('saga.questions');
     Route::get('/saga/quizzes', [SagaController::class, 'index'])
         ->name('saga.quizzes');
     Route::post('/saga/answer', [SagaController::class, 'answer'])

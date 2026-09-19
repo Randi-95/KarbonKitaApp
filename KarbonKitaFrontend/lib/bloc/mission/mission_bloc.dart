@@ -26,21 +26,24 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
       final filtered = state.currentFilter != null
           ? state.getFiltered(state.currentFilter)
           : missions;
-      emit(state.copyWith(
-        status: MissionStatus.loaded,
-        missions: missions,
-        filteredMissions: filtered,
-      ));
+      emit(
+        state.copyWith(
+          status: MissionStatus.loaded,
+          missions: missions,
+          filteredMissions: filtered,
+        ),
+      );
     } on MissionException catch (e) {
-      emit(state.copyWith(
-        status: MissionStatus.error,
-        errorMessage: e.message,
-      ));
+      emit(
+        state.copyWith(status: MissionStatus.error, errorMessage: e.message),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        status: MissionStatus.error,
-        errorMessage: 'Terjadi kesalahan: $e',
-      ));
+      emit(
+        state.copyWith(
+          status: MissionStatus.error,
+          errorMessage: 'Terjadi kesalahan: $e',
+        ),
+      );
     }
   }
 
@@ -51,26 +54,27 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     emit(state.copyWith(status: MissionStatus.loading, errorMessage: null));
     try {
       final quizzes = await _repository.getSagaQuizzes();
-      final filtered = state.currentFilter == 'quiz'
-          ? quizzes
-          : state.currentFilter != null
-              ? state.missions.where((m) => m.category == state.currentFilter).toList()
-              : [...state.missions, ...quizzes];
-      emit(state.copyWith(
-        status: MissionStatus.loaded,
-        quizzes: quizzes,
-        filteredMissions: filtered,
-      ));
+      // Kuis tidak ditampilkan di halaman misi (hanya lewat FAB),
+      // jadi daftar filter selalu dihitung dari misi non-kuis saja.
+      final filtered = state.getFiltered(state.currentFilter);
+      emit(
+        state.copyWith(
+          status: MissionStatus.loaded,
+          quizzes: quizzes,
+          filteredMissions: filtered,
+        ),
+      );
     } on MissionException catch (e) {
-      emit(state.copyWith(
-        status: MissionStatus.error,
-        errorMessage: e.message,
-      ));
+      emit(
+        state.copyWith(status: MissionStatus.error, errorMessage: e.message),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        status: MissionStatus.error,
-        errorMessage: 'Terjadi kesalahan: $e',
-      ));
+      emit(
+        state.copyWith(
+          status: MissionStatus.error,
+          errorMessage: 'Terjadi kesalahan: $e',
+        ),
+      );
     }
   }
 
@@ -81,10 +85,9 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     final filtered = event.category != null
         ? state.getFiltered(event.category)
         : state.allMissions;
-    emit(state.copyWith(
-      currentFilter: event.category,
-      filteredMissions: filtered,
-    ));
+    emit(
+      state.copyWith(currentFilter: event.category, filteredMissions: filtered),
+    );
   }
 
   Future<void> _onMobilitySynced(

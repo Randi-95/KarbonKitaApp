@@ -7,16 +7,14 @@ import '../../bloc/mission/mission_state.dart';
 import '../../models/mission.dart';
 import 'misi_scan_screen.dart';
 import 'mobility_tracker_screen.dart';
-import 'quiz_level_screen.dart';
 
 class MisiScreen extends StatelessWidget {
   const MisiScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Trigger initial load when screen is built
+    // Trigger initial load when screen is built (kuis hanya lewat FAB)
     context.read<MissionBloc>().add(const MissionsLoaded());
-    context.read<MissionBloc>().add(const QuizzesLoaded());
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FA),
@@ -176,13 +174,6 @@ class MisiScreen extends StatelessWidget {
                 selectedIndex,
                 context,
               ),
-              _buildTabItem(
-                3,
-                Icons.help_outline,
-                'Kuis',
-                selectedIndex,
-                context,
-              ),
             ],
           ),
         );
@@ -198,8 +189,6 @@ class MisiScreen extends StatelessWidget {
         return 1;
       case 'waste':
         return 2;
-      case 'quiz':
-        return 3;
       default:
         return 0;
     }
@@ -213,8 +202,6 @@ class MisiScreen extends StatelessWidget {
         return 'mobility';
       case 2:
         return 'waste';
-      case 3:
-        return 'quiz';
       default:
         return null;
     }
@@ -329,7 +316,6 @@ class MisiScreen extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: () {
               context.read<MissionBloc>().add(const MissionsLoaded());
-              context.read<MissionBloc>().add(const QuizzesLoaded());
             },
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Coba Lagi'),
@@ -358,10 +344,6 @@ class MisiScreen extends StatelessWidget {
       case 'waste':
         message = 'Belum ada misi sampah aktif';
         icon = Icons.recycling;
-        break;
-      case 'quiz':
-        message = 'Belum ada kuis harian tersedia';
-        icon = Icons.help_outline;
         break;
       default:
         message = 'Belum ada misi aktif';
@@ -428,14 +410,6 @@ class MisiScreen extends StatelessWidget {
               missionId: mission.id,
             ),
           ),
-        );
-      };
-    } else if (mission.category == 'quiz') {
-      buttonText = 'Mulai Quiz';
-      onPressed = () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const QuizLevelScreen()),
         );
       };
     } else {
