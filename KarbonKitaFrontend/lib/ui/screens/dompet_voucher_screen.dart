@@ -326,7 +326,7 @@ class _DompetVoucherScreenState extends State<DompetVoucherScreen> {
                   const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
                   const SizedBox(height: 12),
                   Text(
-                    state.inventoryError ?? 'Gagal memuat dompet.',
+                    'Tidak ada koneksi dan belum ada data tersimpan.\n${state.inventoryError ?? 'Gagal memuat dompet.'}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.black54),
                   ),

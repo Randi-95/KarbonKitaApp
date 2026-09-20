@@ -100,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          dashState.errorMessage ?? 'Gagal memuat profil.',
+                          'Tidak ada koneksi dan belum ada data tersimpan.\n${dashState.errorMessage ?? 'Gagal memuat profil.'}',
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.black54),
                         ),

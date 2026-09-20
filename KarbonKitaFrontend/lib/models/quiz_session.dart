@@ -46,6 +46,15 @@ class QuizSession {
           : const [],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'mission_id': missionId,
+    'mission_title': missionTitle,
+    'session_date': sessionDate,
+    'total': total,
+    'xp_per_question': xpPerQuestion,
+    'questions': questions.map((q) => q.toJson()).toList(),
+  };
 }
 
 int _toInt(dynamic value) {

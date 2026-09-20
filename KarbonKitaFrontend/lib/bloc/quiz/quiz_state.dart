@@ -25,6 +25,8 @@ class QuizState {
     this.session,
     this.sessionIndex = 0,
     this.sessionErrorMessage,
+    this.isOffline = false,
+    this.lastUpdated,
   });
 
   final QuizStatus status;
@@ -48,6 +50,10 @@ class QuizState {
   final int sessionIndex;
   final String? sessionErrorMessage;
 
+  /// True bila node/quiz berasal dari cache offline.
+  final bool isOffline;
+  final DateTime? lastUpdated;
+
   QuizState copyWith({
     QuizStatus? status,
     DailyQuiz? quiz,
@@ -62,6 +68,8 @@ class QuizState {
     QuizSession? session,
     int? sessionIndex,
     String? sessionErrorMessage,
+    bool? isOffline,
+    DateTime? lastUpdated,
   }) {
     return QuizState(
       status: status ?? this.status,
@@ -76,6 +84,8 @@ class QuizState {
       session: session ?? this.session,
       sessionIndex: sessionIndex ?? this.sessionIndex,
       sessionErrorMessage: sessionErrorMessage,
+      isOffline: isOffline ?? this.isOffline,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
 }

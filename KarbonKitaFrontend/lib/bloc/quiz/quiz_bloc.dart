@@ -25,17 +25,41 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
         state.quiz != null) {
       return;
     }
+    // Cache Hive dulu agar strip harian langsung tampil offline.
+    if (state.quiz == null) {
+      try {
+        final cachedQuiz = await _repository.getCachedDailyQuiz();
+        if (cachedQuiz != null) {
+          emit(
+            state.copyWith(
+              status: QuizStatus.loaded,
+              quiz: cachedQuiz,
+              isOffline: true,
+            ),
+          );
+        }
+      } catch (_) {}
+    }
     final hasCache = state.quiz != null;
-    emit(
-      state.copyWith(
-        status: hasCache ? state.status : QuizStatus.loading,
-        errorMessage: null,
-        isUnauthorized: false,
-      ),
-    );
+    if (!hasCache) {
+      emit(
+        state.copyWith(
+          status: QuizStatus.loading,
+          errorMessage: null,
+          isUnauthorized: false,
+        ),
+      );
+    }
     try {
       final quiz = await _repository.getDailyQuiz();
-      emit(state.copyWith(status: QuizStatus.loaded, quiz: quiz));
+      emit(
+        state.copyWith(
+          status: QuizStatus.loaded,
+          quiz: quiz,
+          isOffline: false,
+          lastUpdated: DateTime.now(),
+        ),
+      );
     } on AuthException catch (e) {
       if (e.statusCode == 401) {
         emit(state.copyWith(isUnauthorized: true));
@@ -77,17 +101,41 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
         state.nodes.isNotEmpty) {
       return;
     }
+    if (state.nodes.isEmpty) {
+      try {
+        final cached = await _repository.getCachedSagaNodes();
+        if (cached.nodes.isNotEmpty) {
+          emit(
+            state.copyWith(
+              nodesStatus: SagaNodesStatus.loaded,
+              nodes: cached.nodes,
+              isOffline: true,
+              lastUpdated: cached.savedAt,
+            ),
+          );
+        }
+      } catch (_) {}
+    }
     final hasCache = state.nodes.isNotEmpty;
-    emit(
-      state.copyWith(
-        nodesStatus: hasCache ? state.nodesStatus : SagaNodesStatus.loading,
-        nodesErrorMessage: null,
-        isUnauthorized: false,
-      ),
-    );
+    if (!hasCache) {
+      emit(
+        state.copyWith(
+          nodesStatus: SagaNodesStatus.loading,
+          nodesErrorMessage: null,
+          isUnauthorized: false,
+        ),
+      );
+    }
     try {
       final nodes = await _repository.getSagaNodes();
-      emit(state.copyWith(nodesStatus: SagaNodesStatus.loaded, nodes: nodes));
+      emit(
+        state.copyWith(
+          nodesStatus: SagaNodesStatus.loaded,
+          nodes: nodes,
+          isOffline: false,
+          lastUpdated: DateTime.now(),
+        ),
+      );
     } on AuthException catch (e) {
       if (e.statusCode == 401) {
         emit(state.copyWith(isUnauthorized: true));
@@ -135,15 +183,37 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
         state.session?.missionId == event.missionId) {
       return;
     }
+    // Sesi terakhir node ini langsung tampil offline bila ada.
+    if (state.session?.missionId != event.missionId) {
+      try {
+        final cachedSession = await _repository.getCachedNodeQuestions(
+          event.missionId,
+        );
+        if (cachedSession != null) {
+          final first = cachedSession.firstUnansweredIndex;
+          emit(
+            state.copyWith(
+              sessionStatus: SessionStatus.loaded,
+              session: cachedSession,
+              sessionIndex: first == -1 ? 0 : first,
+              clearResult: true,
+              isOffline: true,
+            ),
+          );
+        }
+      } catch (_) {}
+    }
     final hasCache = state.session?.missionId == event.missionId;
-    emit(
-      state.copyWith(
-        sessionStatus: hasCache ? state.sessionStatus : SessionStatus.loading,
-        sessionErrorMessage: null,
-        clearResult: true,
-        isUnauthorized: false,
-      ),
-    );
+    if (!hasCache) {
+      emit(
+        state.copyWith(
+          sessionStatus: SessionStatus.loading,
+          sessionErrorMessage: null,
+          clearResult: true,
+          isUnauthorized: false,
+        ),
+      );
+    }
     try {
       final session = await _repository.getNodeQuestions(event.missionId);
       final first = session.firstUnansweredIndex;
@@ -152,6 +222,7 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
           sessionStatus: SessionStatus.loaded,
           session: session,
           sessionIndex: first == -1 ? 0 : first,
+          isOffline: false,
         ),
       );
     } on AuthException catch (e) {

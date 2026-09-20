@@ -146,8 +146,7 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                state.nodesErrorMessage ??
-                                    'Gagal memuat peta saga.',
+                                'Tidak ada koneksi dan belum ada data tersimpan.\n${state.nodesErrorMessage ?? 'Gagal memuat peta saga.'}',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(color: Colors.black54),
                               ),

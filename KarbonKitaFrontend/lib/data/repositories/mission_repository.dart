@@ -1,21 +1,46 @@
 import '../../core/network/auth_exception.dart';
 import '../../core/network/mission_exception.dart';
+import '../../core/storage/cache_keys.dart';
+import '../../core/storage/cache_service.dart';
+import '../../core/storage/token_storage.dart';
 import '../datasources/mission_remote_datasource.dart';
 import '../../models/daily_quiz.dart';
 import '../../models/mission.dart';
 import '../../models/quiz_node.dart';
 import '../../models/quiz_session.dart';
 
-/// Orkestrasi data mission.
+/// Orkestrasi data mission + cache offline read-only.
 class MissionRepository {
-  MissionRepository(this._remote);
+  MissionRepository(this._remote, {CacheService? cache, TokenStorage? storage})
+    : _cache = cache,
+      _storage = storage;
 
   final MissionRemoteDatasource _remote;
+  final CacheService? _cache;
+  final TokenStorage? _storage;
+
+  Future<String> _uid() async {
+    try {
+      final user = await _storage?.readUser();
+      if (user != null) return user.id.toString();
+    } catch (_) {}
+    return 'guest';
+  }
+
+  // ---------- misi aktif ----------
 
   /// Ambil misi aktif (mobility + waste) dari backend.
   Future<List<Mission>> getActiveMissions() async {
     try {
-      return await _remote.fetchActiveMissions();
+      final result = await _remote.fetchActiveMissions();
+      final cache = _cache;
+      if (cache != null) {
+        await cache.writeJson(
+          CacheKeys.missionsActive(await _uid()),
+          result.map((m) => m.toJson()).toList(),
+        );
+      }
+      return result;
     } on MissionException {
       rethrow;
     } catch (e) {
@@ -23,10 +48,42 @@ class MissionRepository {
     }
   }
 
+  Future<({List<Mission> missions, DateTime? savedAt})>
+  getCachedActiveMissions() async {
+    final cache = _cache;
+    if (cache == null) return (missions: const <Mission>[], savedAt: null);
+    final key = CacheKeys.missionsActive(await _uid());
+    final raw =
+        cache.readList(key) ??
+        cache.readList(CacheKeys.missionsActive('guest'));
+    if (raw == null) return (missions: const <Mission>[], savedAt: null);
+    try {
+      return (
+        missions: raw
+            .whereType<Map<String, dynamic>>()
+            .map(Mission.fromJson)
+            .toList(),
+        savedAt: cache.lastUpdated(key),
+      );
+    } catch (_) {
+      return (missions: const <Mission>[], savedAt: null);
+    }
+  }
+
+  // ---------- saga quizzes ----------
+
   /// Ambil kuis harian (Saga Map) dari backend.
   Future<List<Mission>> getSagaQuizzes() async {
     try {
-      return await _remote.fetchSagaQuizzes();
+      final result = await _remote.fetchSagaQuizzes();
+      final cache = _cache;
+      if (cache != null) {
+        await cache.writeJson(
+          CacheKeys.sagaQuizzes(await _uid()),
+          result.map((m) => m.toJson()).toList(),
+        );
+      }
+      return result;
     } on MissionException {
       rethrow;
     } catch (e) {
@@ -34,10 +91,37 @@ class MissionRepository {
     }
   }
 
+  Future<List<Mission>> getCachedSagaQuizzes() async {
+    final cache = _cache;
+    if (cache == null) return const [];
+    final key = CacheKeys.sagaQuizzes(await _uid());
+    final raw =
+        cache.readList(key) ?? cache.readList(CacheKeys.sagaQuizzes('guest'));
+    if (raw == null) return const [];
+    try {
+      return raw
+          .whereType<Map<String, dynamic>>()
+          .map(Mission.fromJson)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  // ---------- saga nodes ----------
+
   /// Ambil daftar node peta Saga dari backend.
   Future<List<QuizNode>> getSagaNodes() async {
     try {
-      return await _remote.fetchSagaNodes();
+      final result = await _remote.fetchSagaNodes();
+      final cache = _cache;
+      if (cache != null) {
+        await cache.writeJson(
+          CacheKeys.sagaNodes(await _uid()),
+          result.map((n) => n.toJson()).toList(),
+        );
+      }
+      return result;
     } on MissionException {
       rethrow;
     } on AuthException catch (e) {
@@ -51,10 +135,41 @@ class MissionRepository {
     }
   }
 
+  Future<({List<QuizNode> nodes, DateTime? savedAt})>
+  getCachedSagaNodes() async {
+    final cache = _cache;
+    if (cache == null) return (nodes: const <QuizNode>[], savedAt: null);
+    final key = CacheKeys.sagaNodes(await _uid());
+    final raw =
+        cache.readList(key) ?? cache.readList(CacheKeys.sagaNodes('guest'));
+    if (raw == null) return (nodes: const <QuizNode>[], savedAt: null);
+    try {
+      return (
+        nodes: raw
+            .whereType<Map<String, dynamic>>()
+            .map(QuizNode.fromJson)
+            .toList(),
+        savedAt: cache.lastUpdated(key),
+      );
+    } catch (_) {
+      return (nodes: const <QuizNode>[], savedAt: null);
+    }
+  }
+
+  // ---------- sesi node ----------
+
   /// Ambil sesi soal 1 node dari backend.
   Future<QuizSession> getNodeQuestions(int missionId) async {
     try {
-      return await _remote.fetchNodeQuestions(missionId);
+      final result = await _remote.fetchNodeQuestions(missionId);
+      final cache = _cache;
+      if (cache != null) {
+        await cache.writeJson(
+          CacheKeys.sagaSession(missionId),
+          result.toJson(),
+        );
+      }
+      return result;
     } on MissionException {
       rethrow;
     } on AuthException catch (e) {
@@ -68,10 +183,30 @@ class MissionRepository {
     }
   }
 
+  Future<QuizSession?> getCachedNodeQuestions(int missionId) async {
+    final map = _cache?.readMap(CacheKeys.sagaSession(missionId));
+    if (map == null) return null;
+    try {
+      return QuizSession.fromJson(map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ---------- daily quiz ----------
+
   /// Ambil kuis harian (typed) dari backend.
   Future<DailyQuiz> getDailyQuiz() async {
     try {
-      return await _remote.fetchDailyQuiz();
+      final result = await _remote.fetchDailyQuiz();
+      final cache = _cache;
+      if (cache != null) {
+        final date = DateTime.now().toIso8601String().substring(0, 10);
+        await cache.writeJson(CacheKeys.dailyQuiz(date), result.toJson());
+        // Simpan juga key umum agar offline lintas hari tetap ada fallback.
+        await cache.writeJson(CacheKeys.dailyQuiz('latest'), result.toJson());
+      }
+      return result;
     } on MissionException {
       rethrow;
     } on AuthException catch (e) {
@@ -83,6 +218,21 @@ class MissionRepository {
       );
     } catch (e) {
       throw MissionException('Gagal memuat kuis harian: $e');
+    }
+  }
+
+  Future<DailyQuiz?> getCachedDailyQuiz() async {
+    final cache = _cache;
+    if (cache == null) return null;
+    final date = DateTime.now().toIso8601String().substring(0, 10);
+    final map =
+        cache.readMap(CacheKeys.dailyQuiz(date)) ??
+        cache.readMap(CacheKeys.dailyQuiz('latest'));
+    if (map == null) return null;
+    try {
+      return DailyQuiz.fromJson(map);
+    } catch (_) {
+      return null;
     }
   }
 

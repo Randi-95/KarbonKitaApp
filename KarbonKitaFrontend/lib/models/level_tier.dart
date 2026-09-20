@@ -70,6 +70,13 @@ class LevelTiersData {
           : const [],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'xp': xp,
+    'level': level,
+    'current_tier': currentTier,
+    'tiers': tiers.map((t) => t.toJson()).toList(),
+  };
 }
 
 int _toInt(dynamic value) {

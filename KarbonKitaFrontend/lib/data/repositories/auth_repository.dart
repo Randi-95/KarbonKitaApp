@@ -1,3 +1,4 @@
+import '../../core/storage/cache_service.dart';
 import '../../core/storage/token_storage.dart';
 import '../../models/auth_response.dart';
 import '../../models/user.dart';
@@ -5,10 +6,12 @@ import '../datasources/auth_remote_datasource.dart';
 
 /// Orkestrasi login + sesi permanen (hapus hanya saat logout).
 class AuthRepository {
-  AuthRepository(this._remote, this._storage);
+  AuthRepository(this._remote, this._storage, {CacheService? cache})
+    : _cache = cache;
 
   final AuthRemoteDatasource _remote;
   final TokenStorage _storage;
+  final CacheService? _cache;
 
   Future<AuthResponse> login({
     required String phoneOrEmail,
@@ -32,6 +35,10 @@ class AuthRepository {
 
   /// Cek sesi tersimpan: token ada + profil /me valid.
   /// Return null bila belum login / token basi.
+  ///
+  /// Offline: bila token + profil lokal ada tapi `/me` gagal karena
+  /// jaringan, kembalikan profil lokal agar cache offline tetap tampil
+  /// (bukan logout paksa). Cache dibersihkan hanya saat logout eksplisit.
   Future<User?> checkSession() async {
     final token = await _storage.readToken();
     if (token == null || token.isEmpty) return null;
@@ -40,6 +47,10 @@ class AuthRepository {
       await _storage.saveUser(id: user.id, name: user.name, role: user.role);
       return user;
     } catch (_) {
+      final local = await _storage.readUser();
+      if (local != null) {
+        return User(id: local.id, name: local.name, role: local.role);
+      }
       await _storage.clearAll();
       return null;
     }
@@ -48,5 +59,7 @@ class AuthRepository {
   Future<void> logout() async {
     await _remote.logout();
     await _storage.clearAll();
+    // Ganti user = cache user lama tidak boleh terlihat.
+    await _cache?.clearAll();
   }
 }

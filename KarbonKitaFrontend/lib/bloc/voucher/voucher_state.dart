@@ -25,6 +25,8 @@ class VoucherState {
     this.lastClaim,
     this.claimErrorMessage,
     this.isUnauthorized = false,
+    this.isOffline = false,
+    this.lastUpdated,
   });
 
   final VoucherStatus status;
@@ -48,6 +50,10 @@ class VoucherState {
   /// True bila backend 401 — UI harus logout, bukan sekadar retry.
   final bool isUnauthorized;
 
+  /// True bila daftar berasal dari cache offline.
+  final bool isOffline;
+  final DateTime? lastUpdated;
+
   // Sentinel agar copyWith bisa me-reset selectedCategory ke null (chip 'Semua').
   static const _noChange = Object();
 
@@ -66,6 +72,8 @@ class VoucherState {
     bool clearClaim = false,
     String? claimErrorMessage,
     bool? isUnauthorized,
+    bool? isOffline,
+    DateTime? lastUpdated,
   }) {
     return VoucherState(
       status: status ?? this.status,
@@ -85,6 +93,8 @@ class VoucherState {
       lastClaim: clearClaim ? null : (lastClaim ?? this.lastClaim),
       claimErrorMessage: clearClaim ? null : claimErrorMessage,
       isUnauthorized: isUnauthorized ?? this.isUnauthorized,
+      isOffline: isOffline ?? this.isOffline,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
 }

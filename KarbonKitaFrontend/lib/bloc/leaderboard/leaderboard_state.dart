@@ -11,6 +11,8 @@ class LeaderboardState {
     this.board,
     this.errorMessage,
     this.isUnauthorized = false,
+    this.isOffline = false,
+    this.lastUpdated,
   });
 
   final LeaderboardStatus status;
@@ -22,6 +24,10 @@ class LeaderboardState {
   /// True bila backend 401 — UI harus logout, bukan sekadar retry.
   final bool isUnauthorized;
 
+  /// True bila papan berasal dari cache offline.
+  final bool isOffline;
+  final DateTime? lastUpdated;
+
   LeaderboardState copyWith({
     LeaderboardStatus? status,
     LeaderboardScope? scope,
@@ -29,6 +35,8 @@ class LeaderboardState {
     LeaderboardBoard? board,
     String? errorMessage,
     bool? isUnauthorized,
+    bool? isOffline,
+    DateTime? lastUpdated,
   }) {
     return LeaderboardState(
       status: status ?? this.status,
@@ -37,6 +45,8 @@ class LeaderboardState {
       board: board ?? this.board,
       errorMessage: errorMessage,
       isUnauthorized: isUnauthorized ?? this.isUnauthorized,
+      isOffline: isOffline ?? this.isOffline,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
 }

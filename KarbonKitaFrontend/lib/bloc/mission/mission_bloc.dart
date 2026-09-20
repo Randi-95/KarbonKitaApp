@@ -5,6 +5,7 @@ import '../../data/repositories/mission_repository.dart';
 import 'mission_event.dart';
 import 'mission_state.dart';
 
+/// Cache-first: tampilkan misi tersimpan instan, refresh diam-diam.
 class MissionBloc extends Bloc<MissionEvent, MissionState> {
   MissionBloc(this._repository) : super(const MissionState()) {
     on<MissionsLoaded>(_onMissionsLoaded);
@@ -20,24 +21,61 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     MissionsLoaded event,
     Emitter<MissionState> emit,
   ) async {
-    emit(state.copyWith(status: MissionStatus.loading, errorMessage: null));
+    // Cache memory sesi masih dianggap tampil — tapi pastikan juga
+    // cache Hive dimuat saat app baru dibuka (missions kosong).
+    if (state.status == MissionStatus.loaded && state.missions.isNotEmpty) {
+      return;
+    }
+    try {
+      final cached = await _repository.getCachedActiveMissions();
+      if (cached.missions.isNotEmpty) {
+        final filtered = state.currentFilter != null
+            ? cached.missions
+                  .where((m) => m.category == state.currentFilter)
+                  .toList()
+            : cached.missions;
+        emit(
+          state.copyWith(
+            status: MissionStatus.loaded,
+            missions: cached.missions,
+            filteredMissions: filtered,
+            isOffline: true,
+            lastUpdated: cached.savedAt,
+          ),
+        );
+      }
+    } catch (_) {}
+
+    if (state.missions.isEmpty) {
+      emit(state.copyWith(status: MissionStatus.loading, errorMessage: null));
+    }
     try {
       final missions = await _repository.getActiveMissions();
       final filtered = state.currentFilter != null
-          ? state.getFiltered(state.currentFilter)
+          ? missions.where((m) => m.category == state.currentFilter).toList()
           : missions;
       emit(
         state.copyWith(
           status: MissionStatus.loaded,
           missions: missions,
           filteredMissions: filtered,
+          isOffline: false,
+          lastUpdated: DateTime.now(),
         ),
       );
     } on MissionException catch (e) {
+      if (state.missions.isNotEmpty) {
+        emit(state.copyWith(status: MissionStatus.loaded, isOffline: true));
+        return;
+      }
       emit(
         state.copyWith(status: MissionStatus.error, errorMessage: e.message),
       );
     } catch (e) {
+      if (state.missions.isNotEmpty) {
+        emit(state.copyWith(status: MissionStatus.loaded, isOffline: true));
+        return;
+      }
       emit(
         state.copyWith(
           status: MissionStatus.error,
@@ -51,7 +89,26 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     QuizzesLoaded event,
     Emitter<MissionState> emit,
   ) async {
-    emit(state.copyWith(status: MissionStatus.loading, errorMessage: null));
+    if (state.quizzes.isNotEmpty && state.status == MissionStatus.loaded) {
+      return;
+    }
+    try {
+      final cached = await _repository.getCachedSagaQuizzes();
+      if (cached.isNotEmpty) {
+        emit(
+          state.copyWith(
+            status: MissionStatus.loaded,
+            quizzes: cached,
+            filteredMissions: state.getFiltered(state.currentFilter),
+            isOffline: true,
+          ),
+        );
+      }
+    } catch (_) {}
+
+    if (state.quizzes.isEmpty && state.missions.isEmpty) {
+      emit(state.copyWith(status: MissionStatus.loading, errorMessage: null));
+    }
     try {
       final quizzes = await _repository.getSagaQuizzes();
       // Kuis tidak ditampilkan di halaman misi (hanya lewat FAB),
@@ -62,13 +119,23 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
           status: MissionStatus.loaded,
           quizzes: quizzes,
           filteredMissions: filtered,
+          isOffline: false,
+          lastUpdated: DateTime.now(),
         ),
       );
     } on MissionException catch (e) {
+      if (state.missions.isNotEmpty || state.quizzes.isNotEmpty) {
+        emit(state.copyWith(status: MissionStatus.loaded, isOffline: true));
+        return;
+      }
       emit(
         state.copyWith(status: MissionStatus.error, errorMessage: e.message),
       );
     } catch (e) {
+      if (state.missions.isNotEmpty || state.quizzes.isNotEmpty) {
+        emit(state.copyWith(status: MissionStatus.loaded, isOffline: true));
+        return;
+      }
       emit(
         state.copyWith(
           status: MissionStatus.error,

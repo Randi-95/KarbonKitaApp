@@ -494,7 +494,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         }
 
         if (state.status == VoucherStatus.error) {
-          return _buildErrorState(state.errorMessage ?? 'Terjadi kesalahan');
+          return _buildErrorState(
+            'Tidak ada koneksi dan belum ada data tersimpan.\n${state.errorMessage ?? 'Terjadi kesalahan'}',
+          );
         }
 
         if (state.vouchers.isEmpty) {
