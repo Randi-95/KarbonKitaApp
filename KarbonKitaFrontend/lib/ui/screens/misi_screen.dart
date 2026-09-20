@@ -266,7 +266,7 @@ class MisiScreen extends StatelessWidget {
 
         if (state.status == MissionStatus.error) {
           return _buildErrorState(
-            state.errorMessage ?? 'Terjadi kesalahan',
+            'Tidak ada koneksi dan belum ada data tersimpan.\n${state.errorMessage ?? 'Terjadi kesalahan'}',
             context,
           );
         }

@@ -34,14 +34,14 @@ class Mission {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'description': description,
-        'category': category,
-        'xp_reward': xpReward,
-        'points_reward': pointsReward,
-        'icon': icon,
-      };
+    'id': id,
+    'title': title,
+    'description': description,
+    'category': category,
+    'xp_reward': xpReward,
+    'points_reward': pointsReward,
+    'icon': icon,
+  };
 
   /// Helper untuk mapping category ke icon Flutter
   IconData get categoryIcon {

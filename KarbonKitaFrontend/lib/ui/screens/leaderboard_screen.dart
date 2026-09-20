@@ -113,8 +113,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                state.errorMessage ??
-                                    'Gagal memuat leaderboard.',
+                                'Tidak ada koneksi dan belum ada data tersimpan.\n${state.errorMessage ?? 'Gagal memuat leaderboard.'}',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(color: Colors.black54),
                               ),

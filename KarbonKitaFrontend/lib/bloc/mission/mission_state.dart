@@ -11,6 +11,8 @@ class MissionState {
     this.filteredMissions = const [],
     this.currentFilter,
     this.errorMessage,
+    this.isOffline = false,
+    this.lastUpdated,
   });
 
   final MissionStatus status;
@@ -19,6 +21,10 @@ class MissionState {
   final List<Mission> filteredMissions; // Hasil filter
   final String? currentFilter; // null = Semua, 'mobility', 'waste'
   final String? errorMessage;
+
+  /// True bila data berasal dari cache offline.
+  final bool isOffline;
+  final DateTime? lastUpdated;
 
   /// Semua misi non-kuis (untuk tab 'Semua'). Kuis hanya lewat FAB.
   List<Mission> get allMissions => missions;
@@ -35,6 +41,8 @@ class MissionState {
     List<Mission>? filteredMissions,
     Object? currentFilter = _noChange,
     String? errorMessage,
+    bool? isOffline,
+    DateTime? lastUpdated,
   }) {
     return MissionState(
       status: status ?? this.status,
@@ -45,6 +53,8 @@ class MissionState {
           ? this.currentFilter
           : currentFilter as String?,
       errorMessage: errorMessage,
+      isOffline: isOffline ?? this.isOffline,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
 

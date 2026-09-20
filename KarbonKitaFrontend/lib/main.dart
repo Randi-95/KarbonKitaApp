@@ -11,7 +11,9 @@ import 'bloc/level/level_bloc.dart';
 import 'bloc/mission/mission_bloc.dart';
 import 'bloc/quiz/quiz_bloc.dart';
 import 'bloc/voucher/voucher_bloc.dart';
+import 'core/network/connectivity_service.dart';
 import 'core/network/dio_client.dart';
+import 'core/storage/cache_service.dart';
 import 'core/storage/token_storage.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/leaderboard_remote_datasource.dart';
@@ -28,20 +30,30 @@ import 'ui/screens/home_screen.dart';
 import 'ui/screens/login_screen.dart';
 import 'ui/screens/merchant_dashboard_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Penyimpanan offline (Hive). Gagal init → fallback memori, app tetap jalan.
+  final cache = CacheService();
+  await cache.init();
+
   final storage = TokenStorage();
+  final connectivity = ConnectivityService();
   final dioClient = DioClient(tokenReader: storage.readToken);
   final authRepository = AuthRepository(
     AuthRemoteDatasource(dioClient),
     storage,
+    cache: cache,
   );
   final missionRepository = MissionRepository(
     MissionRemoteDatasource(dioClient),
+    cache: cache,
+    storage: storage,
   );
   final voucherRepository = VoucherRepository(
     VoucherRemoteDatasource(dioClient),
+    cache: cache,
+    storage: storage,
   );
 
   final authBloc = AuthBloc(authRepository)..add(const SessionChecked());
@@ -49,11 +61,13 @@ void main() {
   final voucherBloc = VoucherBloc(voucherRepository);
   final dashboardBloc = DashboardBloc(voucherRepository);
   final leaderboardBloc = LeaderboardBloc(
-    LeaderboardRepository(LeaderboardRemoteDatasource(dioClient)),
+    LeaderboardRepository(LeaderboardRemoteDatasource(dioClient), cache: cache),
   );
   final quizBloc = QuizBloc(missionRepository);
   final profileRepository = ProfileRepository(
     ProfileRemoteDatasource(dioClient),
+    cache: cache,
+    storage: storage,
   );
   final levelBloc = LevelBloc(profileRepository);
   final activityBloc = ActivityBloc(profileRepository);
@@ -68,6 +82,7 @@ void main() {
       quizBloc: quizBloc,
       levelBloc: levelBloc,
       activityBloc: activityBloc,
+      connectivity: connectivity,
     ),
   );
 }
@@ -83,6 +98,7 @@ class MyApp extends StatelessWidget {
     required this.quizBloc,
     required this.levelBloc,
     required this.activityBloc,
+    required this.connectivity,
   });
 
   final AuthBloc authBloc;
@@ -93,6 +109,7 @@ class MyApp extends StatelessWidget {
   final QuizBloc quizBloc;
   final LevelBloc levelBloc;
   final ActivityBloc activityBloc;
+  final ConnectivityService connectivity;
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +138,7 @@ class MyApp extends StatelessWidget {
 }
 
 /// Auto-login: token permanen → langsung Home, tanpa token → Login.
+/// Offline: profil lokal tetap dianggap sesi agar cache offline tampil.
 class _SessionGate extends StatelessWidget {
   const _SessionGate();
 

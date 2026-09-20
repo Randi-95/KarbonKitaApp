@@ -108,6 +108,12 @@ class MyVoucherInventory {
       expired: parse(json['expired']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'active': active.map((e) => e.toJson()).toList(),
+    'used': used.map((e) => e.toJson()).toList(),
+    'expired': expired.map((e) => e.toJson()).toList(),
+  };
 }
 
 /// Hasil `POST /api/vouchers/claim` (201).

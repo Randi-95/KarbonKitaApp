@@ -159,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
                       const SizedBox(height: 12),
                       Text(
-                        state.errorMessage ?? 'Gagal memuat dashboard.',
+                        'Tidak ada koneksi dan belum ada data tersimpan.\n${state.errorMessage ?? 'Gagal memuat dashboard.'}',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.black54),
                       ),

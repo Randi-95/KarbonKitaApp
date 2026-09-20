@@ -9,6 +9,8 @@ class LevelState {
     this.data,
     this.errorMessage,
     this.isUnauthorized = false,
+    this.isOffline = false,
+    this.lastUpdated,
   });
 
   final LevelStatus status;
@@ -18,17 +20,24 @@ class LevelState {
   /// True bila backend 401 — UI harus logout, bukan sekadar retry.
   final bool isUnauthorized;
 
+  final bool isOffline;
+  final DateTime? lastUpdated;
+
   LevelState copyWith({
     LevelStatus? status,
     LevelTiersData? data,
     String? errorMessage,
     bool? isUnauthorized,
+    bool? isOffline,
+    DateTime? lastUpdated,
   }) {
     return LevelState(
       status: status ?? this.status,
       data: data ?? this.data,
       errorMessage: errorMessage,
       isUnauthorized: isUnauthorized ?? this.isUnauthorized,
+      isOffline: isOffline ?? this.isOffline,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
 }
