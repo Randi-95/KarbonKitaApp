@@ -13,14 +13,17 @@ import '../../models/quiz_stage.dart';
 import '../widgets/quiz/quiz_info_card.dart';
 import '../widgets/quiz/quiz_level_header.dart';
 import '../widgets/quiz/quiz_path_painter.dart';
+import '../widgets/quiz/quiz_quota_banner.dart';
 import '../widgets/quiz/quiz_stage_bottom_sheet.dart';
 import '../widgets/quiz/quiz_stage_node.dart';
 
 /// Halaman Level Kuis bergaya gamifikasi (Duolingo-like).
 /// Dibuka via Floating Widget kuis (FABKuis) dengan full-screen push.
 /// Daftar node (1 node = 1 misi quiz) dimuat dari backend via QuizBloc;
-/// maksimal 2 node berikutnya yang belum selesai terbuka berurutan
-/// dari bawah, sisanya locked. Skip sehari tidak menghanguskan progres.
+/// hanya 1 node berikutnya yang belum selesai yang terbuka berurutan
+/// dari bawah (anti-loncat), sisanya locked. Kuota 2 node selesai per hari;
+/// selesai node 1 langsung membuka node 2 hari itu juga.
+/// Skip sehari tidak menghanguskan progres.
 class QuizLevelScreen extends StatefulWidget {
   const QuizLevelScreen({super.key});
 
@@ -57,15 +60,27 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
     );
   }
 
-  void _onNodeTap(BuildContext context, QuizNode node) {
+  /// Kuota harian: max 2 node selesai/hari (1 node = 1 sesi).
+  static const int _dailyQuota = 2;
+
+  int _remainingQuota(List<QuizNode> nodes) {
+    final doneToday = nodes.where((n) => n.isCompletedToday).length;
+    return (_dailyQuota - doneToday).clamp(0, _dailyQuota);
+  }
+
+  void _onNodeTap(BuildContext context, QuizNode node, int remainingQuota) {
     final stage = _stageFor(node);
     // Semua node bisa dibuka untuk lihat deskripsi; hanya playable
-    // yang bisa dimainkan (diatur di bottom sheet).
+    // yang bisa dimainkan (diatur di bottom sheet, termasuk lock kuota habis).
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => QuizStageBottomSheet(stage: stage, node: node),
+      builder: (_) => QuizStageBottomSheet(
+        stage: stage,
+        node: node,
+        remainingQuota: remainingQuota,
+      ),
     );
   }
 
@@ -91,6 +106,13 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
                       userPoints: points,
                     );
                   },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: BlocBuilder<QuizBloc, QuizState>(
+                  builder: (context, state) =>
+                      QuizQuotaBanner(remaining: _remainingQuota(state.nodes)),
                 ),
               ),
               Padding(
@@ -284,6 +306,8 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
   }
 
   /// Slot zig-zag untuk tiap node (dari bawah ke atas).
+  /// Hanya 1 node aktif berurutan (anti-loncat); kuota diteruskan ke
+  /// bottom sheet agar tombol terkunci saat kuota habis.
   List<Widget> _buildNodeWidgets(
     BuildContext context,
     List<QuizNode> nodes,
@@ -291,6 +315,7 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
   ) {
     const leftFractions = [0.28, 0.52, 0.30, 0.55, 0.36, 0.45];
     final tops = _slotTops(nodes.length);
+    final remainingQuota = _remainingQuota(nodes);
     final widgets = <Widget>[];
     for (var i = 0; i < nodes.length; i++) {
       // Node position kecil di bawah, besar di atas.
@@ -312,7 +337,7 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
             left: left,
             child: QuizStageNode(
               stage: stage,
-              onTap: () => _onNodeTap(context, node),
+              onTap: () => _onNodeTap(context, node, remainingQuota),
             ),
           ),
         );
@@ -323,7 +348,7 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
             left: left,
             child: QuizStageNode(
               stage: stage,
-              onTap: () => _onNodeTap(context, node),
+              onTap: () => _onNodeTap(context, node, remainingQuota),
             ),
           ),
         );
@@ -332,10 +357,12 @@ class _QuizLevelScreenState extends State<QuizLevelScreen> {
     return widgets;
   }
 
-  /// Kartu hadiah jujur: total XP babak playable hari ini (2 node).
+  /// Kartu hadiah jujur: XP 1 babak aktif hari ini (strict 1-terbuka).
   Widget _buildRewardCard(List<QuizNode> nodes) {
-    final playables = nodes.where((n) => n.isPlayableToday).toList();
-    final shown = playables.isNotEmpty ? playables : nodes.take(1).toList();
+    final actives = nodes.where((n) => n.isPlayableToday && !n.isDone).toList();
+    final shown = actives.isNotEmpty
+        ? actives.take(1).toList()
+        : nodes.take(1).toList();
     final xp = shown.fold<int>(0, (sum, n) => sum + n.xpReward);
     return QuizInfoCard(
       icon: Icons.flash_on,

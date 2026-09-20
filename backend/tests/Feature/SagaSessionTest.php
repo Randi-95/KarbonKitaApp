@@ -273,48 +273,58 @@ class SagaSessionTest extends TestCase
         ], $this->authHeader($user))->assertStatus(422);
     }
 
-    public function test_two_different_playable_nodes_answerable_same_day(): void
+    public function test_sequential_unlock_two_nodes_answerable_same_day(): void
     {
         $user = $this->makeUser();
-        $this->makeBank($this->makeQuizMission(['title' => 'A', 'xp_reward' => 50]));
-        $this->makeBank($this->makeQuizMission(['title' => 'B', 'xp_reward' => 50]));
+        $missionA = $this->makeQuizMission(['title' => 'A', 'xp_reward' => 50]);
+        $this->makeBank($missionA);
+        $missionB = $this->makeQuizMission(['title' => 'B', 'xp_reward' => 50]);
+        $this->makeBank($missionB);
         $this->makeBank($this->makeQuizMission(['title' => 'C', 'xp_reward' => 50]));
 
+        // Awal: strict 1-terbuka — hanya node A yang playable.
         $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
         $playables = collect($nodes)->where('is_playable_today', true)->values();
-        $this->assertCount(2, $playables);
-        $this->assertCount(2, $playables->pluck('id')->unique()->all());
+        $this->assertCount(1, $playables);
+        $this->assertEquals($missionA->id, $playables->first()['id']);
 
+        // Selesaikan node A penuh (5 soal) → node B langsung terbuka hari itu
+        // juga karena kuota 2/hari belum habis.
+        $sessionA = $this->getJson(
+            "/api/saga/nodes/{$missionA->id}/questions",
+            $this->authHeader($user)
+        )->assertOk()->json('data');
         $totalXp = 0;
-        foreach ($playables as $playable) {
-            $session = $this->getJson(
-                "/api/saga/nodes/{$playable['id']}/questions",
-                $this->authHeader($user)
-            )->assertOk()->json('data');
-            $this->assertEquals($playable['id'], $session['mission_id']);
-
-            $first = $session['questions'][0];
+        foreach ($sessionA['questions'] as $question) {
             $response = $this->postJson('/api/saga/answer', [
-                'quiz_id' => $first['id'],
+                'quiz_id' => $question['id'],
                 'answer' => 'B',
             ], $this->authHeader($user));
             $response->assertOk()->assertJsonPath('data.is_correct', true);
             $totalXp += $response->json('data.xp_earned');
         }
+        $this->assertEquals(50, $totalXp);
 
-        $this->assertEquals(20, $totalXp);
-        $this->assertEquals(20, $user->fresh()->wargaProfile->xp);
-
-        // Kedua node playable tetap sama setelah mengerjakan keduanya.
-        $again = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
-        $playablesAgain = collect($again)->where('is_playable_today', true)->values();
+        $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
+        $playables = collect($nodes)->where('is_playable_today', true)->values();
         $this->assertEquals(
-            $playables->pluck('id')->sort()->values()->all(),
-            $playablesAgain->pluck('id')->sort()->values()->all()
+            [$missionA->id, $missionB->id],
+            $playables->pluck('id')->sort()->values()->all()
         );
-        foreach ($playablesAgain as $node) {
-            $this->assertEquals(1, $node['answered_today']);
-        }
+
+        // Node B (aktif, belum selesai) bisa dijawab hari yang sama.
+        $nodeB = collect($nodes)->firstWhere('id', $missionB->id);
+        $this->assertFalse($nodeB['is_completed_today']);
+        $sessionB = $this->getJson(
+            "/api/saga/nodes/{$missionB->id}/questions",
+            $this->authHeader($user)
+        )->assertOk()->json('data');
+        $response = $this->postJson('/api/saga/answer', [
+            'quiz_id' => $sessionB['questions'][0]['id'],
+            'answer' => 'B',
+        ], $this->authHeader($user));
+        $response->assertOk()->assertJsonPath('data.is_correct', true);
+        $this->assertEquals(60, $user->fresh()->wargaProfile->xp);
     }
 
     public function test_route_name_resolves(): void

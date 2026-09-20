@@ -46,6 +46,9 @@ class DashboardData {
 class DashboardUser {
   const DashboardUser({
     required this.name,
+    required this.rt,
+    required this.rw,
+    required this.kelurahan,
     required this.level,
     required this.xp,
     required this.xpMax,
@@ -59,6 +62,9 @@ class DashboardUser {
   });
 
   final String name;
+  final String rt;
+  final String rw;
+  final String kelurahan;
   final String level;
   final int xp;
   final int xpMax;
@@ -73,6 +79,9 @@ class DashboardUser {
   factory DashboardUser.fromJson(Map<String, dynamic> json) {
     return DashboardUser(
       name: json['name'] as String? ?? '',
+      rt: json['rt']?.toString() ?? '',
+      rw: json['rw']?.toString() ?? '',
+      kelurahan: json['kelurahan'] as String? ?? '',
       level: json['level'] as String? ?? '',
       xp: (json['xp'] as num? ?? 0).toInt(),
       xpMax: (json['xp_max'] as num? ?? 0).toInt(),
@@ -88,6 +97,9 @@ class DashboardUser {
 
   Map<String, dynamic> toJson() => {
     'name': name,
+    'rt': rt,
+    'rw': rw,
+    'kelurahan': kelurahan,
     'level': level,
     'xp': xp,
     'xp_max': xpMax,

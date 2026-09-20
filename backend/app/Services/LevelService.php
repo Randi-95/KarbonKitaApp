@@ -10,6 +10,28 @@ class LevelService
         11 => 5700, 12 => 6800, 13 => 8000, 14 => 9300, 15 => 10700,
     ];
 
+    /**
+     * 3 tier lencana level untuk Profil (unlock berbasis XP, bukan label tersimpan).
+     * Keeper mulai level angka 4 (500 XP), Warrior mulai level angka 7 (1700 XP).
+     */
+    public const TIER_MIN_XP = [
+        'newbie' => 0,
+        'keeper' => 500,
+        'warrior' => 1700,
+    ];
+
+    public const TIER_LABELS = [
+        'newbie' => 'Earth Newbie',
+        'keeper' => 'Earth Keeper',
+        'warrior' => 'Earth Warrior',
+    ];
+
+    public const TIER_ASSETS = [
+        'newbie' => 'assets/images/level_newbie.png',
+        'keeper' => 'assets/images/level_keeper.png',
+        'warrior' => 'assets/images/level_warrior.png',
+    ];
+
     public static function getXpMaxForLevel(string $level): int
     {
         $levelNumber = (int) filter_var($level, FILTER_SANITIZE_NUMBER_INT) ?: 1;
@@ -60,5 +82,42 @@ class LevelService
         }
 
         return 'Earth Warrior '.$level;
+    }
+
+    public static function getTierKeyForXp(int $xp): string
+    {
+        if ($xp >= self::TIER_MIN_XP['warrior']) {
+            return 'warrior';
+        }
+        if ($xp >= self::TIER_MIN_XP['keeper']) {
+            return 'keeper';
+        }
+
+        return 'newbie';
+    }
+
+    /**
+     * @return list<array{key:string,label:string,min_xp:int,max_xp:?int,is_unlocked:bool,is_current:bool,asset:string}>
+     */
+    public static function getTiers(int $xp): array
+    {
+        $current = self::getTierKeyForXp($xp);
+        $order = ['newbie', 'keeper', 'warrior'];
+        $maxMap = ['newbie' => 499, 'keeper' => 1699, 'warrior' => null];
+
+        $tiers = [];
+        foreach ($order as $key) {
+            $tiers[] = [
+                'key' => $key,
+                'label' => self::TIER_LABELS[$key],
+                'min_xp' => self::TIER_MIN_XP[$key],
+                'max_xp' => $maxMap[$key],
+                'is_unlocked' => $xp >= self::TIER_MIN_XP[$key],
+                'is_current' => $key === $current,
+                'asset' => self::TIER_ASSETS[$key],
+            ];
+        }
+
+        return $tiers;
     }
 }
