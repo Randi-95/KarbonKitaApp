@@ -38,6 +38,12 @@ class ApiEndpoints {
   // Dashboard (saldo eco_points)
   static const String userDashboard = '/user/dashboard';
 
+  // Level tiers (3 tier lencana untuk Profil)
+  static const String userLevels = '/user/levels';
+
+  // Aktivitas terbaru untuk Profil
+  static const String userActivities = '/user/activities';
+
   // Leaderboard (scope: rt|rw, timeframe: weekly|monthly)
   static const String leaderboard = '/leaderboard';
 

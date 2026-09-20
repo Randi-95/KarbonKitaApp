@@ -11,6 +11,7 @@ import '../../models/mission.dart';
 import 'misi_screen.dart';
 import 'marketplace_screen.dart';
 import 'leaderboard_screen.dart';
+import 'profile_screen.dart';
 import 'quiz_level_screen.dart';
 import 'carbon_calculator_screen.dart';
 import '../widgets/draggable_quiz_fab.dart';
@@ -126,12 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 3:
         return const LeaderboardScreen();
       case 4:
-        return const Center(
-          child: Text(
-            'Halaman Profil (Segera Hadir)',
-            style: TextStyle(fontSize: 18, color: Colors.grey),
-          ),
-        );
+        return const ProfileScreen();
       default:
         return _buildBeranda();
     }

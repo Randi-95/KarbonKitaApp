@@ -90,7 +90,7 @@ class SagaNodesTest extends TestCase
         $this->assertCount(1, $response->json('data'));
     }
 
-    public function test_first_two_nodes_playable_from_bottom(): void
+    public function test_first_node_playable_from_bottom_strict_sequential(): void
     {
         $user = $this->makeUser();
         $ids = [];
@@ -108,8 +108,8 @@ class SagaNodesTest extends TestCase
             ->pluck('id')
             ->values()
             ->all();
-        // 2 node terendah (dari bawah) yang terbuka, sisanya locked.
-        $this->assertEquals([$ids[0], $ids[1]], $playableIds);
+        // Strict 1-terbuka (anti-loncat): hanya node terendah yang terbuka.
+        $this->assertEquals([$ids[0]], $playableIds);
     }
 
     public function test_progression_advances_after_node_finished(): void
@@ -129,11 +129,12 @@ class SagaNodesTest extends TestCase
             'answer' => $wrongAnswer,
         ], $this->authHeader($user))->assertOk();
 
-        // Progres maju: A selesai (tetap terbuka untuk review), B + C terbuka.
+        // Progres maju strict: A selesai (review), B langsung terbuka hari
+        // itu juga (kuota 2/hari belum habis), C tetap locked.
         $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
         $playableIds = collect($nodes)->where('is_playable_today', true)->pluck('id')->values()->all();
         $this->assertEquals([$missionA->id, $missionB->id, $missionC->id], array_column($nodes, 'id'));
-        $this->assertEquals([$missionA->id, $missionB->id, $missionC->id], $playableIds);
+        $this->assertEquals([$missionA->id, $missionB->id], $playableIds);
 
         $nodeA = collect($nodes)->firstWhere('id', $missionA->id);
         $this->assertTrue($nodeA['is_completed_today']);
@@ -161,8 +162,8 @@ class SagaNodesTest extends TestCase
             'updated_at' => Carbon::now('Asia/Jakarta')->subDay(),
         ]);
 
-        // Hari ini: A tetap selesai (persisten), B + C terbuka, tidak ada
-        // yang hangus / di-reset ke bawah.
+        // Hari ini: A tetap selesai (persisten), hanya B terbuka (strict 1),
+        // C locked. Tidak ada yang hangus / di-reset ke bawah.
         $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
         $nodeA = collect($nodes)->firstWhere('id', $missionA->id);
         $this->assertTrue($nodeA['is_completed']);
@@ -171,7 +172,7 @@ class SagaNodesTest extends TestCase
         $this->assertEquals(0, $nodeA['answered_today']);
 
         $playableIds = collect($nodes)->where('is_playable_today', true)->pluck('id')->values()->all();
-        $this->assertEquals([$missionB->id, $missionC->id], $playableIds);
+        $this->assertEquals([$missionB->id], $playableIds);
     }
 
     public function test_daily_cap_two_nodes_then_next_locked(): void
@@ -372,7 +373,7 @@ class SagaNodesTest extends TestCase
 
         $nodes = $this->getJson('/api/saga/nodes', $this->authHeader($user))->json('data');
         $playableIds = collect($nodes)->where('is_playable_today', true)->pluck('id')->values()->all();
-        $this->assertEquals([$missionA->id, $missionB->id], $playableIds);
+        $this->assertEquals([$missionA->id], $playableIds);
 
         $nodeA = collect($nodes)->firstWhere('id', $missionA->id);
         $this->assertFalse($nodeA['is_completed_today']);

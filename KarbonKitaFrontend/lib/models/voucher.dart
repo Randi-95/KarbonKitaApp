@@ -106,7 +106,7 @@ class VoucherCategory {
   final IconData icon;
 
   static const List<VoucherCategory> values = [
-    VoucherCategory._(null, 'Semua', Icons.eco),
+    VoucherCategory._(null, 'Semua', Icons.apps_rounded),
     VoucherCategory._('kuliner', 'Kuliner', Icons.restaurant),
     VoucherCategory._('sembako', 'Sembako', Icons.shopping_basket),
     VoucherCategory._('fashion', 'Fashion', Icons.checkroom),

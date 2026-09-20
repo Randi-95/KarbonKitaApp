@@ -6,20 +6,28 @@ import '../../screens/quiz_gameplay_screen.dart';
 /// Bottom sheet detail node saga.
 /// Playable: tombol main ke gameplay sesi. Locked/completed: mode baca-saja
 /// (lihat deskripsi, tombol disabled/tanpa navigasi main).
+/// Bila kuota harian habis (remainingQuota <= 0), node locked dikunci
+/// dengan pesan kuota habis.
 class QuizStageBottomSheet extends StatelessWidget {
   final QuizStage stage;
   final QuizNode node;
+
+  /// Sisa kuota main hari ini (2 node/hari). Default 2 agar kompatibel
+  /// dengan pemanggil lama/test.
+  final int remainingQuota;
 
   const QuizStageBottomSheet({
     super.key,
     required this.stage,
     required this.node,
+    this.remainingQuota = 2,
   });
 
   @override
   Widget build(BuildContext context) {
     final completed = node.isDone;
-    final playable = node.isPlayableToday && !completed;
+    final quotaExhausted = remainingQuota <= 0;
+    final playable = node.isPlayableToday && !completed && !quotaExhausted;
 
     return Container(
       decoration: const BoxDecoration(
@@ -143,8 +151,28 @@ class QuizStageBottomSheet extends StatelessWidget {
                     label:
                         '${node.answeredToday}/${node.totalQuestions > 0 ? node.totalQuestions : node.quizzesCount} terjawab',
                   ),
+                  const SizedBox(width: 8),
+                  _MetaChip(
+                    icon: Icons.bolt,
+                    label: 'Sisa $remainingQuota/2 hari ini',
+                  ),
                 ],
               ),
+              if (quotaExhausted && !completed) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    Icon(Icons.info_outline, size: 14, color: Colors.black54),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Kuota 2x main hari ini habis — kembali besok.',
+                        style: TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -205,6 +233,8 @@ class QuizStageBottomSheet extends StatelessWidget {
                             ? 'Lihat Hasil'
                             : playable
                             ? 'Mulai Tantangan'
+                            : quotaExhausted
+                            ? 'Kuota habis — kembali besok'
                             : 'Terkunci — selesaikan babak sebelumnya',
                         style: const TextStyle(
                           fontSize: 15,

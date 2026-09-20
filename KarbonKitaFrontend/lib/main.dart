@@ -4,8 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'bloc/auth/auth_bloc.dart';
 import 'bloc/auth/auth_event.dart';
 import 'bloc/auth/auth_state.dart';
+import 'bloc/activity/activity_bloc.dart';
 import 'bloc/dashboard/dashboard_bloc.dart';
 import 'bloc/leaderboard/leaderboard_bloc.dart';
+import 'bloc/level/level_bloc.dart';
 import 'bloc/mission/mission_bloc.dart';
 import 'bloc/quiz/quiz_bloc.dart';
 import 'bloc/voucher/voucher_bloc.dart';
@@ -14,10 +16,12 @@ import 'core/storage/token_storage.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/leaderboard_remote_datasource.dart';
 import 'data/datasources/mission_remote_datasource.dart';
+import 'data/datasources/profile_remote_datasource.dart';
 import 'data/datasources/voucher_remote_datasource.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/leaderboard_repository.dart';
 import 'data/repositories/mission_repository.dart';
+import 'data/repositories/profile_repository.dart';
 import 'data/repositories/voucher_repository.dart';
 import 'ui/screens/admin_validation_screen.dart';
 import 'ui/screens/home_screen.dart';
@@ -48,6 +52,11 @@ void main() {
     LeaderboardRepository(LeaderboardRemoteDatasource(dioClient)),
   );
   final quizBloc = QuizBloc(missionRepository);
+  final profileRepository = ProfileRepository(
+    ProfileRemoteDatasource(dioClient),
+  );
+  final levelBloc = LevelBloc(profileRepository);
+  final activityBloc = ActivityBloc(profileRepository);
 
   runApp(
     MyApp(
@@ -57,6 +66,8 @@ void main() {
       dashboardBloc: dashboardBloc,
       leaderboardBloc: leaderboardBloc,
       quizBloc: quizBloc,
+      levelBloc: levelBloc,
+      activityBloc: activityBloc,
     ),
   );
 }
@@ -70,6 +81,8 @@ class MyApp extends StatelessWidget {
     required this.dashboardBloc,
     required this.leaderboardBloc,
     required this.quizBloc,
+    required this.levelBloc,
+    required this.activityBloc,
   });
 
   final AuthBloc authBloc;
@@ -78,6 +91,8 @@ class MyApp extends StatelessWidget {
   final DashboardBloc dashboardBloc;
   final LeaderboardBloc leaderboardBloc;
   final QuizBloc quizBloc;
+  final LevelBloc levelBloc;
+  final ActivityBloc activityBloc;
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +104,8 @@ class MyApp extends StatelessWidget {
         BlocProvider.value(value: dashboardBloc),
         BlocProvider.value(value: leaderboardBloc),
         BlocProvider.value(value: quizBloc),
+        BlocProvider.value(value: levelBloc),
+        BlocProvider.value(value: activityBloc),
       ],
       child: MaterialApp(
         title: 'KarbonKita',

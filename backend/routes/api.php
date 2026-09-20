@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminDonationController;
 use App\Http\Controllers\AuthController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\CarbonStatsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DonationController;
 use App\Http\Controllers\LeaderboardController;
+use App\Http\Controllers\LevelController;
 use App\Http\Controllers\MerchantController;
 use App\Http\Controllers\MissionController;
 use App\Http\Controllers\MitraRegisterController;
@@ -43,6 +45,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard
     Route::get('/user/dashboard', [DashboardController::class, 'index'])
         ->name('user.dashboard');
+
+    // Level tiers (lencana 3 tier untuk Profil)
+    Route::get('/user/levels', [LevelController::class, 'index'])
+        ->name('user.levels');
+
+    // Aktivitas terbaru untuk Profil
+    Route::get('/user/activities', [ActivityController::class, 'index'])
+        ->name('user.activities');
 
     // Leaderboard
     Route::get('/leaderboard', [LeaderboardController::class, 'index'])

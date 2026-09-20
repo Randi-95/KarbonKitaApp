@@ -6,6 +6,7 @@ use App\Models\Mission;
 use App\Models\User;
 use App\Models\UserMission;
 use App\Models\WargaProfile;
+use App\Services\LevelService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -22,20 +23,22 @@ class LeaderboardSeeder extends Seeder
             return;
         }
 
+        // Level tidak di-hardcode di sini: dihitung via
+        // LevelService::resolveLevel(xp) setelah total misi dijumlahkan.
         $users = [
             // --- RT 005 / RW 02 (satu RT dengan Rafi/Alya/Reza) ---
-            ['name' => 'Budi Santoso', 'email' => 'budi@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 9', 'streak' => 9],
-            ['name' => 'Siti Rahma', 'email' => 'siti@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 8', 'streak' => 8],
-            ['name' => 'Dewi Lestari', 'email' => 'dewi@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 5', 'streak' => 5],
-            ['name' => 'Andi Pratama', 'email' => 'andi@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 3', 'streak' => 3],
-            ['name' => 'Maya Putri', 'email' => 'maya@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 4', 'streak' => 4],
+            ['name' => 'Budi Santoso', 'email' => 'budi@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'streak' => 9],
+            ['name' => 'Siti Rahma', 'email' => 'siti@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'streak' => 8],
+            ['name' => 'Dewi Lestari', 'email' => 'dewi@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'streak' => 5],
+            ['name' => 'Andi Pratama', 'email' => 'andi@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'streak' => 3],
+            ['name' => 'Maya Putri', 'email' => 'maya@example.com', 'rt' => '005', 'rw' => '02', 'active' => true, 'streak' => 4],
             // --- RT 006 / RW 02 (satu RW, beda RT: muncul di scope=rw saja) ---
-            ['name' => 'Fajar Nugroho', 'email' => 'fajar@example.com', 'rt' => '006', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 6', 'streak' => 6],
-            ['name' => 'Intan Permata', 'email' => 'intan@example.com', 'rt' => '006', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 2', 'streak' => 2],
-            ['name' => 'Hendra Gunawan', 'email' => 'hendra@example.com', 'rt' => '006', 'rw' => '02', 'active' => true, 'level' => 'Earth Warrior 7', 'streak' => 7],
+            ['name' => 'Fajar Nugroho', 'email' => 'fajar@example.com', 'rt' => '006', 'rw' => '02', 'active' => true, 'streak' => 6],
+            ['name' => 'Intan Permata', 'email' => 'intan@example.com', 'rt' => '006', 'rw' => '02', 'active' => true, 'streak' => 2],
+            ['name' => 'Hendra Gunawan', 'email' => 'hendra@example.com', 'rt' => '006', 'rw' => '02', 'active' => true, 'streak' => 7],
             // --- RW 03 (kontrol negatif: tidak muncul di RT/RW 02) ---
-            ['name' => 'Lina Marlina', 'email' => 'lina@example.com', 'rt' => '001', 'rw' => '03', 'active' => true, 'level' => 'Earth Warrior 5', 'streak' => 5],
-            ['name' => 'Doni Saputra', 'email' => 'doni@example.com', 'rt' => '001', 'rw' => '03', 'active' => false, 'level' => 'Earth Newbie', 'streak' => 0],
+            ['name' => 'Lina Marlina', 'email' => 'lina@example.com', 'rt' => '001', 'rw' => '03', 'active' => true, 'streak' => 5],
+            ['name' => 'Doni Saputra', 'email' => 'doni@example.com', 'rt' => '001', 'rw' => '03', 'active' => false, 'streak' => 0],
         ];
 
         // title => [days_ago, status]
@@ -120,7 +123,9 @@ class LeaderboardSeeder extends Seeder
             WargaProfile::updateOrCreate(
                 ['user_id' => $user->id],
                 [
-                    'level' => $data['level'],
+                    // Level sementara; nilai final dihitung ulang dari XP
+                    // via LevelService setelah total misi dijumlahkan.
+                    'level' => LevelService::resolveLevel(0),
                     'xp' => 0,
                     'eco_points' => 0,
                     'streak_days' => $data['streak'],
@@ -169,9 +174,13 @@ class LeaderboardSeeder extends Seeder
                 ->selectRaw('COALESCE(SUM(missions.xp_reward), 0) as xp, COALESCE(SUM(missions.points_reward), 0) as points')
                 ->first();
 
+            $syncedXp = (int) ($totals->xp ?? 0);
             WargaProfile::where('user_id', $user->id)->update([
-                'xp' => (int) ($totals->xp ?? 0),
+                'xp' => $syncedXp,
                 'eco_points' => (int) ($totals->points ?? 0),
+                // Sinkron label level dengan XP agar tidak "turun"
+                // saat user main kuis/misi (resolveLevel menimpa).
+                'level' => LevelService::resolveLevel($syncedXp),
             ]);
         }
     }

@@ -1,6 +1,7 @@
 /// Node peta Saga dari `GET /api/saga/nodes` (1 node = 1 misi quiz).
-/// Progres berurutan dari bawah: maksimal 2 node berikutnya yang belum
-/// selesai terbuka; skip sehari tidak menghanguskan progres.
+/// Progres berurutan dari bawah: hanya 1 node berikutnya yang belum
+/// selesai yang terbuka (anti-loncat); kuota 2 node selesai per hari.
+/// Skip sehari tidak menghanguskan progres.
 class QuizNode {
   const QuizNode({
     required this.id,

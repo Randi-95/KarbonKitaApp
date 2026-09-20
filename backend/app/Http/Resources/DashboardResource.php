@@ -17,6 +17,9 @@ class DashboardResource extends JsonResource
         return [
             'user' => [
                 'name' => $this->resource['name'],
+                'rt' => $this->resource['rt'] ?? null,
+                'rw' => $this->resource['rw'] ?? null,
+                'kelurahan' => $this->resource['kelurahan'] ?? null,
                 'level' => $profile->level,
                 'xp' => $profile->xp,
                 'xp_max' => LevelService::getXpMaxForLevel($profile->level),

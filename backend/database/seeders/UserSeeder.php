@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use App\Models\WargaProfile;
+use App\Services\LevelService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -32,7 +33,10 @@ class UserSeeder extends Seeder
 
         WargaProfile::create([
             'user_id' => $rafi->id,
-            'level' => 'Earth Warrior 7',
+            // Sinkron dengan LevelService: 1080 XP => Earth Keeper 5.
+            // Jangan hardcode label Warrior agar tidak "turun" saat kuis
+            // menimpa via LevelService::resolveLevel().
+            'level' => LevelService::resolveLevel(1080),
             'xp' => 1080,
             'eco_points' => 380,
             'streak_days' => 7,
@@ -62,7 +66,8 @@ class UserSeeder extends Seeder
 
         WargaProfile::create([
             'user_id' => $alya->id,
-            'level' => 'Earth Warrior 8',
+            // Sinkron dengan LevelService: 1180 XP => Earth Keeper 5.
+            'level' => LevelService::resolveLevel(1180),
             'xp' => 1180,
             'eco_points' => 405,
             'streak_days' => 8,
@@ -91,7 +96,8 @@ class UserSeeder extends Seeder
 
         WargaProfile::create([
             'user_id' => $reza->id,
-            'level' => 'Earth Warrior 6',
+            // Sinkron dengan LevelService: 830 XP => Earth Keeper 5.
+            'level' => LevelService::resolveLevel(830),
             'xp' => 830,
             'eco_points' => 285,
             'streak_days' => 6,

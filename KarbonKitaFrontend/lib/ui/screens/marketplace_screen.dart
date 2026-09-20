@@ -353,7 +353,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             children: List.generate(VoucherCategory.values.length, (index) {
               final category = VoucherCategory.values[index];
               final isSelected = state.selectedCategory == category.value;
-              final isLoadingThis = loadingCategory == category.value;
+              final isLoadingThis =
+                  state.status == VoucherStatus.loading &&
+                  loadingCategory == category.value;
               return Padding(
                 padding: const EdgeInsets.only(right: 10),
                 child: GestureDetector(

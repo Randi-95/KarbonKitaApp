@@ -26,12 +26,19 @@ class SagaController extends Controller
     public const SESSION_SIZE = 5;
 
     /**
-     * Maksimal node yang terbuka per hari: 2 node berikutnya yang belum
-     * selesai, urut dari bawah (position kecil). Maksimal 2 node selesai
-     * per hari; sisanya terkunci. Skip sehari tidak hangus — progres diam
-     * di node terakhir (berbasis progres, bukan rotasi tanggal).
+     * Kuota main harian: maksimal 2 node selesai per hari (1 node = 1 sesi
+     * 5 soal). Unlock berurutan strict: hanya 1 node berikutnya yang belum
+     * selesai yang terbuka; selesai node 1 hari ini langsung membuka node 2
+     * hari itu juga selama kuota belum habis. Skip sehari tidak hangus —
+     * progres diam di node terakhir (berbasis progres, bukan rotasi tanggal).
      */
     public const DAILY_PLAYABLE_NODES = 2;
+
+    /** Kuota node selesai per hari (dipakai untuk cap harian). */
+    public const DAILY_QUOTA = 2;
+
+    /** Jumlah node berikutnya yang dibuka berurutan (anti-loncat = 1). */
+    public const SEQUENTIAL_OPEN = 1;
 
     /**
      * GET /api/saga/quizzes — kuis harian (legacy, 1 soal).
@@ -297,8 +304,9 @@ class SagaController extends Controller
 
     /**
      * GET /api/saga/nodes — daftar node peta Saga (1 node = 1 misi quiz).
-     * Progres berurutan dari bawah: maksimal DAILY_PLAYABLE_NODES node
-     * berikutnya yang belum selesai terbuka; sisanya locked.
+     * Progres berurutan dari bawah: hanya SEQUENTIAL_OPEN (1) node
+     * berikutnya yang belum selesai terbuka; sisanya locked. Kuota
+     * DAILY_QUOTA (2) node selesai per hari.
      * today_quiz_id = soal sesi pertama yang belum dijawab (kompatibilitas).
      * is_completed = pernah selesai (persisten, tidak hangus bila skip hari).
      */
@@ -355,10 +363,22 @@ class SagaController extends Controller
             ]))->resolve();
         }
 
+        $completedTodayCount = 0;
+        foreach ($nodes as $node) {
+            if (! empty($node['is_completed_today'])) {
+                $completedTodayCount++;
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Saga nodes retrieved successfully.',
             'data' => $nodes,
+            'meta' => [
+                'daily_quota' => self::DAILY_QUOTA,
+                'completed_today' => $completedTodayCount,
+                'remaining' => max(self::DAILY_QUOTA - $completedTodayCount, 0),
+            ],
         ]);
     }
 
@@ -464,10 +484,10 @@ class SagaController extends Controller
     }
 
     /**
-     * Daftar mission_id playable: maksimal DAILY_PLAYABLE_NODES node
-     * berikutnya yang belum selesai, urut dari bawah. Node yang selesai
-     * hari ini tetap terbuka (untuk review). Bila cap harian tercapai
-     * (sudah N node selesai hari ini), node berikut terkunci sampai besok.
+     * Daftar mission_id playable: hanya SEQUENTIAL_OPEN (1) node berikutnya
+     * yang belum selesai, urut dari bawah (anti-loncat). Node yang selesai
+     * hari ini tetap terbuka (untuk review). Kuota harian DAILY_QUOTA (2):
+     * bila sudah 2 node selesai hari ini, node berikut terkunci sampai besok.
      * Skip sehari tidak menghanguskan apa pun (murni berbasis progres).
      *
      * @return list<int>
@@ -476,7 +496,7 @@ class SagaController extends Controller
     {
         $ordered = $this->orderedQuizMissionIds();
 
-        if (count($ordered) <= self::DAILY_PLAYABLE_NODES) {
+        if (count($ordered) <= self::SEQUENTIAL_OPEN) {
             return $ordered;
         }
 
@@ -488,10 +508,10 @@ class SagaController extends Controller
         }
 
         $next = array_values(array_diff($ordered, $everDone));
-        $next = array_slice($next, 0, self::DAILY_PLAYABLE_NODES);
+        $next = array_slice($next, 0, self::SEQUENTIAL_OPEN);
 
         $completedToday = $this->completedTodayMissionIds($userId, $ordered, $todayWib);
-        $capReached = count($completedToday) >= self::DAILY_PLAYABLE_NODES;
+        $capReached = count($completedToday) >= self::DAILY_QUOTA;
 
         $playable = [];
         foreach ($ordered as $mid) {
