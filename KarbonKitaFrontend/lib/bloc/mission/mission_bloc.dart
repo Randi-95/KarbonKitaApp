@@ -14,6 +14,8 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     on<MobilitySynced>(_onMobilitySynced);
     on<MobilitySyncReset>(_onMobilitySyncReset);
     on<QuizAnswerSubmitted>(_onQuizAnswerSubmitted);
+    on<WasteVerifyRequested>(_onWasteVerifyRequested);
+    on<WasteVerifyReset>(_onWasteVerifyReset);
   }
 
   final MissionRepository _repository;
@@ -236,5 +238,102 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
       emit(state.copyWith(errorMessage: 'Gagal submit jawaban: $e'));
       rethrow;
     }
+  }
+
+  Future<void> _onWasteVerifyRequested(
+    WasteVerifyRequested event,
+    Emitter<MissionState> emit,
+  ) async {
+    emit(
+      state.copyWith(
+        wasteVerifyStatus: WasteVerifyStatus.uploading,
+        wasteVerifyErrorMessage: null,
+        wasteVerifyData: null,
+      ),
+    );
+    try {
+      final result = await _repository.verifyWaste(
+        missionId: event.missionId,
+        imagePath: event.imagePath,
+      );
+      if (result.verified) {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.verified,
+            verifyResult: result,
+            wasteVerifyErrorMessage: null,
+          ),
+        );
+        // Refresh kunci harian agar kartu misi terkunci seperti mobility.
+        add(const MissionsLoaded(force: true));
+      } else if (result.status == 'rejected') {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.rejected,
+            verifyResult: result,
+            wasteVerifyErrorMessage: null,
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.pendingReview,
+            verifyResult: result,
+            wasteVerifyErrorMessage: null,
+          ),
+        );
+      }
+    } on MissionException catch (e) {
+      if (e.statusCode == 409) {
+        // Backend bedakan via data: {already_completed_today: true}
+        // = daily-cap, selain itu = foto duplikat (anti-fraud).
+        final alreadyCapped = e.data?['already_completed_today'] == true;
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: alreadyCapped
+                ? WasteVerifyStatus.dailyCapped
+                : WasteVerifyStatus.duplicate,
+            wasteVerifyErrorMessage: e.message,
+            wasteVerifyData: e.data,
+          ),
+        );
+        return;
+      }
+      if (e.statusCode == 503) {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.pendingReview,
+            wasteVerifyErrorMessage: e.message,
+            wasteVerifyData: e.data,
+          ),
+        );
+        return;
+      }
+      emit(
+        state.copyWith(
+          wasteVerifyStatus: WasteVerifyStatus.failure,
+          wasteVerifyErrorMessage: e.message,
+          wasteVerifyData: e.data,
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(
+          wasteVerifyStatus: WasteVerifyStatus.failure,
+          wasteVerifyErrorMessage: 'Gagal verifikasi: $e',
+        ),
+      );
+    }
+  }
+
+  void _onWasteVerifyReset(WasteVerifyReset event, Emitter<MissionState> emit) {
+    emit(
+      state.copyWith(
+        wasteVerifyStatus: WasteVerifyStatus.initial,
+        verifyResult: null,
+        wasteVerifyErrorMessage: null,
+        wasteVerifyData: null,
+      ),
+    );
   }
 }

@@ -53,3 +53,19 @@ class QuizAnswerSubmitted extends MissionEvent {
   final int quizId;
   final String answer;
 }
+
+/// Upload foto sampah untuk validasi AI Gemini (backend).
+class WasteVerifyRequested extends MissionEvent {
+  const WasteVerifyRequested({
+    required this.missionId,
+    required this.imagePath,
+  });
+
+  final int missionId;
+  final String imagePath;
+}
+
+/// Reset status verifikasi sampah ke initial (dipakai setelah sheet ditutup).
+class WasteVerifyReset extends MissionEvent {
+  const WasteVerifyReset();
+}

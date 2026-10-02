@@ -70,12 +70,51 @@ class DioClient {
     }
   }
 
+  /// POST multipart untuk upload file (mis. verifikasi sampah).
+  ///
+  /// [fields] dikirim sebagai form fields, [filePath] sebagai single file
+  /// di [fileField]. Timeout 60 detik karena upload + antre AI Gemini
+  /// di backend bisa >20 detik.
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    required Map<String, dynamic> fields,
+    required String filePath,
+    required String fileField,
+    String? fileName,
+  }) async {
+    try {
+      final resolvedName = fileName ?? filePath.split(RegExp(r'[\\/]')).last;
+      final formData = FormData.fromMap({
+        ...fields,
+        fileField: await MultipartFile.fromFile(
+          filePath,
+          filename: resolvedName,
+        ),
+      });
+      final res = await _dio.post(
+        path,
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      final data = res.data;
+      if (data is Map<String, dynamic>) return data;
+      return <String, dynamic>{'data': data};
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
   AuthException _map(DioException e) {
     final status = e.response?.statusCode;
     final body = e.response?.data;
 
     String message = 'Terjadi kesalahan jaringan. Coba lagi.';
     var errors = const <String, List<String>>{};
+    Map<String, dynamic>? data;
 
     if (body is Map) {
       final rawMsg = body['message'];
@@ -92,14 +131,27 @@ class DioClient {
         });
         errors = parsed;
       }
+      final rawData = body['data'];
+      if (rawData is Map<String, dynamic>) {
+        data = rawData;
+      } else if (rawData is Map) {
+        data = rawData.map((k, v) => MapEntry(k.toString(), v));
+      }
     }
 
     switch (status) {
       case 401:
+        // Login gagal punya pesan ramah khusus; endpoint lain (mis.
+        // verify-waste tanpa token) pakai pesan backend apa adanya.
+        final unauthorizedMsg =
+            message == 'Terjadi kesalahan jaringan. Coba lagi.'
+            ? 'No HP/Email atau kata sandi salah.'
+            : message;
         return AuthException(
-          'No HP/Email atau kata sandi salah.',
+          unauthorizedMsg,
           errors: errors,
           statusCode: status,
+          data: data,
         );
       case 403:
         return AuthException(
@@ -108,18 +160,21 @@ class DioClient {
               : 'Akun dinonaktifkan. Hubungi dukungan.',
           errors: errors,
           statusCode: status,
+          data: data,
         );
       case 422:
         return AuthException(
           message.isNotEmpty ? message : 'Data belum valid. Periksa kembali.',
           errors: errors,
           statusCode: status,
+          data: data,
         );
       case 429:
         return AuthException(
           'Terlalu sering mencoba. Tunggu 1 menit lalu coba lagi.',
           errors: errors,
           statusCode: status,
+          data: data,
         );
     }
 
@@ -132,6 +187,11 @@ class DioClient {
       );
     }
 
-    return AuthException(message, errors: errors, statusCode: status);
+    return AuthException(
+      message,
+      errors: errors,
+      statusCode: status,
+      data: data,
+    );
   }
 }

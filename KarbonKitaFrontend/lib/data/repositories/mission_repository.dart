@@ -6,6 +6,7 @@ import '../../core/storage/token_storage.dart';
 import '../datasources/mission_remote_datasource.dart';
 import '../../models/daily_quiz.dart';
 import '../../models/mission.dart';
+import '../../models/verify_waste_result.dart';
 import '../../models/quiz_node.dart';
 import '../../models/quiz_session.dart';
 
@@ -129,6 +130,7 @@ class MissionRepository {
         e.message,
         errors: e.errors,
         statusCode: e.statusCode,
+        data: e.data,
       );
     } catch (e) {
       throw MissionException('Gagal memuat node saga: $e');
@@ -177,6 +179,7 @@ class MissionRepository {
         e.message,
         errors: e.errors,
         statusCode: e.statusCode,
+        data: e.data,
       );
     } catch (e) {
       throw MissionException('Gagal memuat soal sesi: $e');
@@ -215,6 +218,7 @@ class MissionRepository {
         e.message,
         errors: e.errors,
         statusCode: e.statusCode,
+        data: e.data,
       );
     } catch (e) {
       throw MissionException('Gagal memuat kuis harian: $e');
@@ -250,9 +254,43 @@ class MissionRepository {
         e.message,
         errors: e.errors,
         statusCode: e.statusCode,
+        data: e.data,
       );
     } catch (e) {
       throw MissionException('Gagal submit jawaban kuis: $e');
+    }
+  }
+
+  /// Verifikasi foto sampah via AI (multipart upload).
+  /// Return [VerifyWasteResult] dari `data` envelope 200/201.
+  /// 409 duplicate / 409 daily-cap / 503 / 422 diteruskan sebagai
+  /// [MissionException] lengkap dengan `statusCode` + `data` backend
+  /// agar Bloc bisa menampilkan dialog yang tepat.
+  Future<VerifyWasteResult> verifyWaste({
+    required int missionId,
+    required String imagePath,
+  }) async {
+    try {
+      final envelope = await _remote.verifyWaste(
+        missionId: missionId,
+        imagePath: imagePath,
+      );
+      final data = envelope['data'];
+      if (data is Map<String, dynamic>) {
+        return VerifyWasteResult.fromJson(data);
+      }
+      throw const MissionException('Format hasil verifikasi tidak dikenali.');
+    } on MissionException {
+      rethrow;
+    } on AuthException catch (e) {
+      throw MissionException(
+        e.message,
+        errors: e.errors,
+        statusCode: e.statusCode,
+        data: e.data,
+      );
+    } catch (e) {
+      throw MissionException('Gagal verifikasi sampah: $e');
     }
   }
 
@@ -279,6 +317,7 @@ class MissionRepository {
         e.message,
         errors: e.errors,
         statusCode: e.statusCode,
+        data: e.data,
       );
     } catch (e) {
       throw MissionException('Gagal sinkronisasi mobilitas: $e');
