@@ -71,13 +71,20 @@ class MissionRemoteDatasource {
   }
 
   /// POST /api/missions/verify-waste
-  /// Upload foto untuk validasi AI sampah.
-  /// TODO: Implement saat image upload diperlukan.
+  /// Upload foto untuk validasi AI sampah (multipart: mission_id + image).
+  /// Return envelope mentah; 409/422/503 diteruskan sebagai exception
+  /// dengan `data` payload dari backend.
   Future<Map<String, dynamic>> verifyWaste({
     required int missionId,
     required String imagePath,
   }) async {
-    throw UnimplementedError('Image upload belum diimplementasikan');
+    final envelope = await _client.postMultipart(
+      ApiEndpoints.verifyWaste,
+      fields: <String, dynamic>{'mission_id': missionId},
+      filePath: imagePath,
+      fileField: 'image',
+    );
+    return envelope;
   }
 
   /// POST /api/missions/mobility-sync
