@@ -12,6 +12,7 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     on<QuizzesLoaded>(_onQuizzesLoaded);
     on<MissionsFiltered>(_onMissionsFiltered);
     on<MobilitySynced>(_onMobilitySynced);
+    on<MobilitySyncReset>(_onMobilitySyncReset);
     on<QuizAnswerSubmitted>(_onQuizAnswerSubmitted);
   }
 
@@ -23,7 +24,10 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
   ) async {
     // Cache memory sesi masih dianggap tampil — tapi pastikan juga
     // cache Hive dimuat saat app baru dibuka (missions kosong).
-    if (state.status == MissionStatus.loaded && state.missions.isNotEmpty) {
+    // force=true (setelah misi selesai) melewati short-circuit ini.
+    if (!event.force &&
+        state.status == MissionStatus.loaded &&
+        state.missions.isNotEmpty) {
       return;
     }
     try {
@@ -161,22 +165,58 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     MobilitySynced event,
     Emitter<MissionState> emit,
   ) async {
+    emit(
+      state.copyWith(
+        mobilityStatus: MobilitySyncStatus.syncing,
+        mobilityErrorMessage: null,
+      ),
+    );
     try {
-      await _repository.syncMobility(
+      final envelope = await _repository.syncMobility(
         missionId: event.missionId,
         activityType: event.activityType,
         distanceKm: event.distanceKm,
         durationSeconds: event.durationSeconds,
         gpsCoordinatesPath: event.gpsCoordinatesPath,
       );
-      // Success - bisa emit event tambahan jika perlu refresh data
+      final data = envelope['data'];
+      emit(
+        state.copyWith(
+          mobilityStatus: MobilitySyncStatus.success,
+          mobilityResult: data is Map<String, dynamic>
+              ? data
+              : <String, dynamic>{'raw': data},
+          mobilityErrorMessage: null,
+        ),
+      );
     } on MissionException catch (e) {
-      emit(state.copyWith(errorMessage: e.message));
-      rethrow; // Biarkan UI handle error
+      emit(
+        state.copyWith(
+          mobilityStatus: MobilitySyncStatus.failure,
+          mobilityErrorMessage: e.message,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(errorMessage: 'Gagal sinkronisasi: $e'));
-      rethrow;
+      emit(
+        state.copyWith(
+          mobilityStatus: MobilitySyncStatus.failure,
+          mobilityErrorMessage: 'Gagal sinkronisasi: $e',
+        ),
+      );
     }
+  }
+
+  void _onMobilitySyncReset(
+    MobilitySyncReset event,
+    Emitter<MissionState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        mobilityStatus: MobilitySyncStatus.initial,
+        mobilityResult: null,
+        mobilityErrorMessage: null,
+      ),
+    );
   }
 
   Future<void> _onQuizAnswerSubmitted(
