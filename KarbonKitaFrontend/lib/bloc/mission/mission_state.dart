@@ -3,6 +3,9 @@ import '../../models/mission.dart';
 /// Status muat misi.
 enum MissionStatus { initial, loading, loaded, error }
 
+/// Status sinkronisasi mobilitas (terpisah dari status daftar misi).
+enum MobilitySyncStatus { initial, syncing, success, failure }
+
 class MissionState {
   const MissionState({
     this.status = MissionStatus.initial,
@@ -13,6 +16,9 @@ class MissionState {
     this.errorMessage,
     this.isOffline = false,
     this.lastUpdated,
+    this.mobilityStatus = MobilitySyncStatus.initial,
+    this.mobilityResult,
+    this.mobilityErrorMessage,
   });
 
   final MissionStatus status;
@@ -25,6 +31,11 @@ class MissionState {
   /// True bila data berasal dari cache offline.
   final bool isOffline;
   final DateTime? lastUpdated;
+
+  /// Hasil sync mobilitas terakhir (isi `data` dari envelope backend).
+  final MobilitySyncStatus mobilityStatus;
+  final Map<String, dynamic>? mobilityResult;
+  final String? mobilityErrorMessage;
 
   /// Semua misi non-kuis (untuk tab 'Semua'). Kuis hanya lewat FAB.
   List<Mission> get allMissions => missions;
@@ -43,6 +54,9 @@ class MissionState {
     String? errorMessage,
     bool? isOffline,
     DateTime? lastUpdated,
+    MobilitySyncStatus? mobilityStatus,
+    Object? mobilityResult = _noChange,
+    Object? mobilityErrorMessage = _noChange,
   }) {
     return MissionState(
       status: status ?? this.status,
@@ -55,6 +69,13 @@ class MissionState {
       errorMessage: errorMessage,
       isOffline: isOffline ?? this.isOffline,
       lastUpdated: lastUpdated ?? this.lastUpdated,
+      mobilityStatus: mobilityStatus ?? this.mobilityStatus,
+      mobilityResult: mobilityResult == _noChange
+          ? this.mobilityResult
+          : mobilityResult as Map<String, dynamic>?,
+      mobilityErrorMessage: mobilityErrorMessage == _noChange
+          ? this.mobilityErrorMessage
+          : mobilityErrorMessage as String?,
     );
   }
 

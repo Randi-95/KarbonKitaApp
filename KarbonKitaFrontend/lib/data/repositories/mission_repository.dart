@@ -258,7 +258,7 @@ class MissionRepository {
 
   /// Sinkronisasi aktivitas mobilitas.
   Future<Map<String, dynamic>> syncMobility({
-    required int missionId,
+    int? missionId,
     required String activityType,
     required double distanceKm,
     required int durationSeconds,
@@ -274,6 +274,12 @@ class MissionRepository {
       );
     } on MissionException {
       rethrow;
+    } on AuthException catch (e) {
+      throw MissionException(
+        e.message,
+        errors: e.errors,
+        statusCode: e.statusCode,
+      );
     } catch (e) {
       throw MissionException('Gagal sinkronisasi mobilitas: $e');
     }

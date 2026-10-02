@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 /// Mission model dari API response.
-/// Backend MissionResource: id, title, description, category, xp_reward, points_reward, icon
+/// Backend MissionResource: id, title, description, category, xp_reward,
+/// points_reward, target_distance_km (mobility saja, null = tanpa target),
+/// icon, is_completed_today (kunci harian 1x per misi).
 class Mission {
   const Mission({
     required this.id,
@@ -11,6 +13,8 @@ class Mission {
     required this.xpReward,
     required this.pointsReward,
     required this.icon,
+    this.isCompletedToday = false,
+    this.targetDistanceKm,
   });
 
   final int id;
@@ -21,6 +25,13 @@ class Mission {
   final int pointsReward;
   final String icon;
 
+  /// True bila user sudah verified misi ini hari ini (WIB).
+  /// Default false agar cache lama tetap aman.
+  final bool isCompletedToday;
+
+  /// Target jarak (KM) khusus misi mobilitas. Null = tanpa target.
+  final double? targetDistanceKm;
+
   factory Mission.fromJson(Map<String, dynamic> json) {
     return Mission(
       id: (json['id'] as num).toInt(),
@@ -30,6 +41,8 @@ class Mission {
       xpReward: (json['xp_reward'] as num? ?? 0).toInt(),
       pointsReward: (json['points_reward'] as num? ?? 0).toInt(),
       icon: json['icon'] as String? ?? '',
+      isCompletedToday: json['is_completed_today'] as bool? ?? false,
+      targetDistanceKm: (json['target_distance_km'] as num?)?.toDouble(),
     );
   }
 
@@ -41,6 +54,8 @@ class Mission {
     'xp_reward': xpReward,
     'points_reward': pointsReward,
     'icon': icon,
+    'is_completed_today': isCompletedToday,
+    'target_distance_km': targetDistanceKm,
   };
 
   /// Helper untuk mapping category ke icon Flutter

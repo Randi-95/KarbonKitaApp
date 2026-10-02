@@ -258,6 +258,57 @@ class VerifyWasteTest extends TestCase
         $this->assertEquals(0, PointTransaction::where('reference_id', $flagged->id)->count());
     }
 
+    public function test_same_mission_twice_same_day_returns_409(): void
+    {
+        $user = $this->makeWarga();
+        $mission = $this->makeMission();
+
+        $this->postJson('/api/missions/verify-waste', [
+            'mission_id' => $mission->id,
+            // Dimensi beda => bytes beda => hash beda
+            // (fake()->image deterministik per dimensi).
+            'image' => UploadedFile::fake()->image('first.png', 10, 10),
+        ], $this->authHeader($user))->assertStatus(201);
+
+        $pointsAfterFirst = WargaProfile::where('user_id', $user->id)->first()->eco_points;
+
+        // Gambar berbeda (hash berbeda) tapi misi sama hari sama → kunci harian.
+        $this->postJson('/api/missions/verify-waste', [
+            'mission_id' => $mission->id,
+            'image' => UploadedFile::fake()->image('second.png', 20, 20),
+        ], $this->authHeader($user))
+            ->assertStatus(409)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('data.already_completed_today', true);
+
+        $this->assertEquals(
+            $pointsAfterFirst,
+            WargaProfile::where('user_id', $user->id)->first()->eco_points
+        );
+    }
+
+    public function test_rejected_does_not_lock_daily_cap(): void
+    {
+        $this->useRealGeminiFake(
+            '{"is_valid":false,"confidence":40,"waste_category":"unknown","reason":"Blurry photo"}'
+        );
+        $user = $this->makeWarga();
+        $mission = $this->makeMission();
+
+        $this->postJson('/api/missions/verify-waste', [
+            'mission_id' => $mission->id,
+            'image' => UploadedFile::fake()->image('blurry.png', 10, 10),
+        ], $this->authHeader($user))->assertOk()->assertJsonPath('data.status', 'rejected');
+
+        // Rejected tidak mengunci — upload bagus setelahnya tetap 201.
+        // Kembalikan ke mock sukses (mock=true memberi valid + confidence 95).
+        config()->set('services.gemini.mock', true);
+        $this->postJson('/api/missions/verify-waste', [
+            'mission_id' => $mission->id,
+            'image' => UploadedFile::fake()->image('good.png', 20, 20),
+        ], $this->authHeader($user))->assertStatus(201);
+    }
+
     public function test_duplicate_image_blocked_across_users(): void
     {
         $userA = $this->makeWarga();

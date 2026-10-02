@@ -83,19 +83,20 @@ class MissionRemoteDatasource {
   /// POST /api/missions/mobility-sync
   /// Sinkronisasi data mobilitas (GPS, jarak, durasi).
   Future<Map<String, dynamic>> mobilitySync({
-    required int missionId,
+    int? missionId,
     required String activityType, // 'cycling' | 'walking'
     required double distanceKm,
     required int durationSeconds,
     required List<Map<String, double>> gpsCoordinatesPath,
   }) async {
-    final envelope = await _client.post(ApiEndpoints.mobilitySync, {
-      'mission_id': missionId,
+    final body = <String, dynamic>{
       'activity_type': activityType,
       'distance_km': distanceKm,
       'duration_seconds': durationSeconds,
       'gps_coordinates_path': gpsCoordinatesPath,
-    });
+    };
+    if (missionId != null) body['mission_id'] = missionId;
+    final envelope = await _client.post(ApiEndpoints.mobilitySync, body);
     return envelope;
   }
 
