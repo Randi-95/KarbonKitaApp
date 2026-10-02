@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/carbon_calculator/carbon_calculator_cubit.dart';
 import '../widgets/carbon_calculator/category_tab_bar.dart';
 import '../widgets/carbon_calculator/emission_gauge_card.dart';
+import '../widgets/carbon_calculator/gas_input_card.dart';
+import '../widgets/carbon_calculator/listrik_input_card.dart';
 import '../widgets/carbon_calculator/recommendation_card.dart';
 import '../widgets/carbon_calculator/vehicle_input_card.dart';
 
@@ -95,21 +97,31 @@ class _CarbonCalculatorView extends StatelessWidget {
                     p.emissionKg != c.emissionKg ||
                     p.jarakKm != c.jarakKm ||
                     p.bbmLiter != c.bbmLiter ||
-                    p.fuelType != c.fuelType,
+                    p.fuelType != c.fuelType ||
+                    p.vehicleType != c.vehicleType ||
+                    p.listrikKwh != c.listrikKwh ||
+                    p.gasTabung3kg != c.gasTabung3kg ||
+                    p.gasTabung12kg != c.gasTabung12kg,
                 builder: (context, state) {
-                  if (state.category != CarbonCategory.kendaraan) {
-                    return const _ComingSoonCard();
-                  }
                   return Column(
                     children: [
-                      const VehicleInputCard(),
+                      switch (state.category) {
+                        CarbonCategory.kendaraan => const VehicleInputCard(),
+                        CarbonCategory.listrik => const ListrikInputCard(),
+                        CarbonCategory.gas => const GasInputCard(),
+                      },
                       const SizedBox(height: 16),
                       EmissionGaugeCard(
                         emissionKg: state.emissionKg,
                         progress: state.gaugeProgress,
+                        category: state.category,
+                        offsetKm: state.offsetKm,
                       ),
                       const SizedBox(height: 16),
-                      RecommendationCard(isHighEmission: state.isHighEmission),
+                      RecommendationCard(
+                        isHighEmission: state.isHighEmission,
+                        category: state.category,
+                      ),
                     ],
                   );
                 },
@@ -117,46 +129,6 @@ class _CarbonCalculatorView extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ComingSoonCard extends StatelessWidget {
-  const _ComingSoonCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.construction_outlined, color: Color(0xFF43A047), size: 40),
-          SizedBox(height: 12),
-          Text(
-            'Fitur Segera Hadir',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 6),
-          Text(
-            'Kalkulator untuk kategori ini sedang kami siapkan.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.black54),
-          ),
-        ],
       ),
     );
   }
