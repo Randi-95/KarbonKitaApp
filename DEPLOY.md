@@ -291,9 +291,28 @@ logs web`, pastikan `WEB_PORT` di `.env` = target CloudPanel, lalu `up -d`.
 `APP_KEY` (pakai metode `--show` di langkah 3 bila `key:generate` biasa
 `Permission denied`), lalu `up -d` + `restart app`.
 
-### Foto upload 404
-Volume/`storage:link` belum terbentuk. Jalankan
-`docker compose -p karbonkita exec app php artisan storage:link`.
+### Foto upload 404 (semua `/storage/...` 404 tapi file ada di `storage/app/public`)
+
+Urutan cek (sudah terbukti di lapangan):
+1. **Symlink rusak** — `public/storage` harus berupa link valid ke
+   `storage/app/public`. Kalau repo pernah dijalankan via Docker,
+   entrypoint container sempat membuat symlink **path Linux absolut**
+   yang yatim di Windows (`LinkType` kosong). Perbaiki:
+   ```powershell
+   Remove-Item backend\public\storage -Force   # hapus link yatim
+   php artisan storage:link                    # pakai PHP 8.4
+   ```
+   Verifikasi: `Get-Item backend\public\storage` harus `LinkType: Junction`
+   (Windows) dan `curl -I <host>/storage/mitra/...png` harus 200.
+2. **`APP_URL` salah port/host** — `Storage::url()` membangun URL foto dari
+   `APP_URL`. `http://localhost` (tanpa port) padahal serve di `:8000` =
+   semua URL foto salah host. Samakan dengan alamat serve
+   (`http://localhost:8000` lokal, `https://domain` produksi), lalu
+   `php artisan config:clear` + restart serve.
+3. **Aplikasi menormalisasi host** — Flutter me-rewrite origin URL gambar ke
+   `API_BASE_URL` (`ApiEndpoints.resolveImageUrl`), jadi perbedaan
+   `localhost` vs `127.0.0.1` vs IP LAN vs domain tidak lagi fatal selama
+   file-nya tersaji (poin 1) dan `APP_URL` benar (poin 2).
 
 ---
 

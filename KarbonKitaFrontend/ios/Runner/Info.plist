@@ -51,6 +51,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Diperlukan untuk memindai foto sampah pada misi hijau.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Diperlukan untuk memilih foto dokumen dan toko saat pendaftaran mitra.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Diperlukan untuk melacak rute misi mobilitas hijau secara real-time.</string>
 	<key>UILaunchStoryboardName</key>

@@ -1,6 +1,11 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../core/network/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../models/auth_response.dart';
+import '../../models/mitra_register_result.dart';
 import '../../models/user.dart';
 
 /// Akses mentah ke endpoint auth backend.
@@ -35,5 +40,43 @@ class AuthRemoteDatasource {
     final data = envelope['data'];
     if (data is Map<String, dynamic>) return User.fromJson(data);
     throw const FormatException('Format profil tidak dikenali.');
+  }
+
+  /// POST /api/auth/register-mitra (multipart: fields + file KTP/NIB/toko).
+  /// Kunci [files]: foto_ktp, foto_nib, foto_toko (wajib),
+  /// foto_toko_2, foto_toko_3 (opsional, null bila kosong).
+  ///
+  /// Mobile baca via path file; web baca via bytes karena path blob
+  /// tidak bisa dibuka dengan dart:io.
+  Future<MitraRegisterResult> registerMitra({
+    required Map<String, dynamic> fields,
+    required Map<String, XFile?> files,
+  }) async {
+    final parts = <String, MultipartFile>{};
+    for (final entry in files.entries) {
+      final file = entry.value;
+      if (file == null) continue;
+      if (kIsWeb) {
+        parts[entry.key] = MultipartFile.fromBytes(
+          await file.readAsBytes(),
+          filename: file.name,
+        );
+      } else {
+        parts[entry.key] = await MultipartFile.fromFile(
+          file.path,
+          filename: file.name,
+        );
+      }
+    }
+    final envelope = await _client.postMultipartFiles(
+      ApiEndpoints.registerMitra,
+      fields: fields,
+      files: parts,
+    );
+    final data = envelope['data'];
+    if (data is Map<String, dynamic>) {
+      return MitraRegisterResult.fromJson(data);
+    }
+    throw const FormatException('Format hasil registrasi tidak dikenali.');
   }
 }

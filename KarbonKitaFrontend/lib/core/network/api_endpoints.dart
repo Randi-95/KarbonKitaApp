@@ -12,6 +12,8 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
   static const String me = '/user';
+  static const String register = '/auth/register';
+  static const String registerMitra = '/auth/register-mitra';
 
   // Missions
   static const String missionsActive = '/missions/active';
@@ -56,10 +58,48 @@ class ApiEndpoints {
   // Body: {unique_code: qr_token}. Token asli backend format KBK-XXX-XXX.
   static const String vouchersRedeem = '/vouchers/redeem';
 
+  // Admin validasi mitra (role:admin).
+  static const String adminMerchants = '/admin/merchants';
+
+  /// GET /api/admin/merchants?status=pending|verified|rejected.
+  static String adminMerchantsQuery({String status = 'pending'}) =>
+      '$adminMerchants?status=$status';
+
+  static String adminMerchantDetail(int id) => '$adminMerchants/$id';
+  static String adminMerchantVerify(int id) => '$adminMerchants/$id/verify';
+
   static String leaderboardQuery({
     required String scope,
     required String timeframe,
   }) => '$leaderboard?scope=$scope&timeframe=$timeframe';
 
   static String url(String path) => '$baseUrl$path';
+
+  /// Normalisasi URL gambar dari server agar bisa di-load aplikasi.
+  ///
+  /// Backend membangun URL via `Storage::url()` dari `APP_URL`, yang bisa
+  /// beda host/port dengan base URL yang dipakai Flutter (cth. APP_URL
+  /// `http://localhost` tanpa port, emulator `10.0.2.2`, atau domain
+  /// produksi). Fungsi ini mempertahankan path+query tapi menukar
+  /// origin (scheme/host/port) ke [baseUrl] — server yang pasti terjangkau
+  /// karena API-nya sendiri jalan di sana. URL relatif juga didukung.
+  /// Return '' bila kosong/tidak valid (UI tampilkan placeholder).
+  static String resolveImageUrl(String? url) {
+    if (url == null) return '';
+    final raw = url.trim();
+    if (raw.isEmpty) return '';
+    final base = Uri.parse(baseUrl);
+    final parsed = Uri.tryParse(raw);
+    if (parsed == null) return '';
+    if (!parsed.hasScheme) {
+      final path = raw.startsWith('/') ? raw : '/$raw';
+      return '${base.origin}$path';
+    }
+    final rebuilt = parsed.replace(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
+    );
+    return rebuilt.toString();
+  }
 }
