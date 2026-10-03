@@ -36,6 +36,43 @@ class AuthRepository {
     return result;
   }
 
+  /// Register warga baru + simpan sesi seperti login.
+  Future<AuthResponse> register({
+    required String name,
+    required String phone,
+    required String email,
+    required String password,
+    required String passwordConfirmation,
+    required String city,
+    required String district,
+    required String subDistrict,
+    required String rt,
+    required String rw,
+  }) async {
+    final result = await _remote.register(
+      name: name,
+      phone: phone,
+      email: email,
+      password: password,
+      passwordConfirmation: passwordConfirmation,
+      city: city,
+      district: district,
+      subDistrict: subDistrict,
+      rt: rt,
+      rw: rw,
+    );
+    if (result.token.isEmpty) {
+      throw const FormatException('Token kosong dari server.');
+    }
+    await _storage.saveToken(result.token);
+    await _storage.saveUser(
+      id: result.user.id,
+      name: result.user.name,
+      role: result.user.role,
+    );
+    return result;
+  }
+
   /// Cek sesi tersimpan: token ada + profil /me valid.
   /// Return null bila belum login / token basi.
   ///

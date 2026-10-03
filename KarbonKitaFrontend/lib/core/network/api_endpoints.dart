@@ -5,14 +5,14 @@
 class ApiEndpoints {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:8000/api',
+    defaultValue: 'https://mage.pemudasintaks.web.id/api',
   );
 
   // Auth
   static const String login = '/auth/login';
+  static const String register = '/auth/register';
   static const String logout = '/auth/logout';
   static const String me = '/user';
-  static const String register = '/auth/register';
   static const String registerMitra = '/auth/register-mitra';
 
   // Missions
