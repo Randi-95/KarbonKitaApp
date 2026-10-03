@@ -25,4 +25,13 @@ class CacheKeys {
 
   /// Dashboard merchant per user mitra (1 toko per user).
   static String merchantDashboard(String uid) => 'merchant_dashboard_$uid';
+
+  /// Cache master wilayah (nasional, bukan per user).
+  static const String regionsProvinces = 'regions_provinces';
+  static String regionsRegencies(String provinceCode) =>
+      'regions_regencies_$provinceCode';
+  static String regionsDistricts(String regencyCode) =>
+      'regions_districts_$regencyCode';
+  static String regionsVillages(String districtCode) =>
+      'regions_villages_$districtCode';
 }
