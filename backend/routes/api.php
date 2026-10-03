@@ -105,6 +105,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:mitra')->group(function () {
         Route::get('/merchant/dashboard', [MerchantController::class, 'dashboard'])
             ->name('merchant.dashboard');
+        Route::get('/merchant/disbursements', [MerchantController::class, 'disbursements'])
+            ->name('merchant.disbursements');
         Route::patch('/merchant/status', [MerchantController::class, 'updateStatus'])
             ->name('merchant.status');
         Route::post('/vouchers/redeem', [MerchantController::class, 'redeem'])

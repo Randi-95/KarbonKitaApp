@@ -3,7 +3,10 @@
 /backend/.env
 /backend/.env.backup
 /backend/.env.production
+!/backend/.env.example
+!/backend/.env.production.example
 /backend/storage/*.key
 /backend/storage/pail
 /backend/.phpunit.result.cache
 /backend/.phpunit.cache
+/backend/docker-compose.override.yml

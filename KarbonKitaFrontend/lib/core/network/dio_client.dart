@@ -70,6 +70,21 @@ class DioClient {
     }
   }
 
+  /// PATCH helper untuk toggle status toko. Error mapping sama dengan post.
+  Future<Map<String, dynamic>> patch(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final res = await _dio.patch(path, data: body);
+      final data = res.data;
+      if (data is Map<String, dynamic>) return data;
+      return <String, dynamic>{'data': data};
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
   /// POST multipart untuk upload file (mis. verifikasi sampah).
   ///
   /// [fields] dikirim sebagai form fields, [filePath] sebagai single file
@@ -163,8 +178,17 @@ class DioClient {
           data: data,
         );
       case 422:
+        // Backend mengirim message generik "Validation failed." dengan detail
+        // di `errors`. Pakai pesan field pertama agar user tahu penyebabnya.
+        final fieldMessage = errors.values
+            .expand((e) => e)
+            .firstWhere((m) => m.trim().isNotEmpty, orElse: () => '');
         return AuthException(
-          message.isNotEmpty ? message : 'Data belum valid. Periksa kembali.',
+          fieldMessage.isNotEmpty
+              ? fieldMessage
+              : (message.isNotEmpty
+                    ? message
+                    : 'Data belum valid. Periksa kembali.'),
           errors: errors,
           statusCode: status,
           data: data,

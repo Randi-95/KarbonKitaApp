@@ -22,4 +22,7 @@ class CacheKeys {
 
   static String levels(String uid) => 'levels_$uid';
   static String activities(String uid, int limit) => 'activities_${uid}_$limit';
+
+  /// Dashboard merchant per user mitra (1 toko per user).
+  static String merchantDashboard(String uid) => 'merchant_dashboard_$uid';
 }

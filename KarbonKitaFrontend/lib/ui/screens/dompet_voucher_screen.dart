@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
@@ -898,8 +898,17 @@ class _RedeemSheetState extends State<_RedeemSheet> {
           SizedBox(
             width: 200,
             height: 200,
-            child: CustomPaint(
-              painter: _DummyQrPainter(seed: widget.token.hashCode),
+            child: QrImageView(
+              data: widget.token,
+              version: QrVersions.auto,
+              size: 200,
+              backgroundColor: Colors.white,
+              errorStateBuilder: (context, error) => const Center(
+                child: Text(
+                  'Gagal menampilkan QR',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -987,57 +996,4 @@ class _RedeemSheetState extends State<_RedeemSheet> {
       ),
     );
   }
-}
-
-class _DummyQrPainter extends CustomPainter {
-  final int seed;
-
-  _DummyQrPainter({required this.seed});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bg = Paint()..color = Colors.white;
-    canvas.drawRect(Offset.zero & size, bg);
-
-    final fg = Paint()..color = Colors.black;
-    const int n = 29;
-    final double cell = size.width / n;
-    final rand = Random(seed);
-
-    bool inFinder(int x, int y) {
-      final inTL = x < 8 && y < 8;
-      final inTR = x >= n - 8 && y < 8;
-      final inBL = x < 8 && y >= n - 8;
-      return inTL || inTR || inBL;
-    }
-
-    for (int y = 0; y < n; y++) {
-      for (int x = 0; x < n; x++) {
-        if (inFinder(x, y)) continue;
-        if (rand.nextDouble() < 0.42) {
-          canvas.drawRect(Rect.fromLTWH(x * cell, y * cell, cell, cell), fg);
-        }
-      }
-    }
-
-    void finder(double ox, double oy) {
-      const double s = 7;
-      canvas.drawRect(Rect.fromLTWH(ox, oy, s * cell, s * cell), fg);
-      canvas.drawRect(
-        Rect.fromLTWH(ox + cell, oy + cell, 5 * cell, 5 * cell),
-        Paint()..color = Colors.white,
-      );
-      canvas.drawRect(
-        Rect.fromLTWH(ox + 2 * cell, oy + 2 * cell, 3 * cell, 3 * cell),
-        fg,
-      );
-    }
-
-    finder(0, 0);
-    finder((n - 7) * cell, 0);
-    finder(0, (n - 7) * cell);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

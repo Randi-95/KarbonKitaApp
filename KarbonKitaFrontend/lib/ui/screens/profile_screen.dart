@@ -50,6 +50,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<AuthBloc>().add(const LoggedOut());
   }
 
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keluar dari akun?'),
+        content: const Text(
+          'Sesi dan data offline Anda akan dihapus. Anda perlu login kembali.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Keluar',
+              style: TextStyle(
+                color: Color(0xFFC62828),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      // SessionGate otomatis berpindah ke LoginScreen saat state
+      // unauthenticated — tidak perlu Navigator manual.
+      context.read<AuthBloc>().add(const LoggedOut());
+    }
+  }
+
   void _soon(BuildContext context, String fitur) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -168,6 +201,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 12),
                         _LevelProgressCard(user: user),
+                        const SizedBox(height: 20),
+                        _LogoutButton(onLogout: () => _confirmLogout(context)),
                       ],
                     ),
                   ),
@@ -716,6 +751,35 @@ class _ActivitiesCard extends StatelessWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LogoutButton extends StatelessWidget {
+  const _LogoutButton({required this.onLogout});
+
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onLogout,
+        icon: const Icon(Icons.logout, size: 18),
+        label: const Text(
+          'Keluar',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFFC62828),
+          side: const BorderSide(color: Color(0xFFC62828)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
       ),
     );
   }
