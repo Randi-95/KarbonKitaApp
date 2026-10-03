@@ -380,6 +380,11 @@ class MisiScreen extends StatelessWidget {
   }
 
   Widget _buildMissionCard(Mission mission, BuildContext context) {
+    // Kunci harian 1x per misi — kartu selesai hari ini dikunci total.
+    if (mission.isCompletedToday) {
+      return _buildCompletedCard(mission);
+    }
+
     // Determine button action based on category
     VoidCallback? onPressed;
     String buttonText;
@@ -387,17 +392,31 @@ class MisiScreen extends StatelessWidget {
 
     if (mission.category == 'mobility') {
       buttonText = 'Mulai Tracker';
-      onPressed = () {
-        Navigator.push(
+      onPressed = () async {
+        final bloc = context.read<MissionBloc>();
+        final result = await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => MobilityTrackerScreen(
               missionTitle: mission.title,
               activityType: _getActivityTypeFromTitle(mission.title),
               missionId: mission.id,
+              targetDistanceKm: mission.targetDistanceKm ?? 0.1,
             ),
           ),
         );
+        // Refresh status harian agar kartu langsung terkunci.
+        bloc.add(const MissionsLoaded(force: true));
+        if (result is Map<String, dynamic> && context.mounted) {
+          final xp = result['xp_earned']?.toString() ?? '0';
+          final points = result['points_earned']?.toString() ?? '0';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Misi selesai! +$xp XP, +$points poin.'),
+              backgroundColor: const Color(0xFF1B8039),
+            ),
+          );
+        }
       };
     } else if (mission.category == 'waste') {
       buttonText = 'Upload Foto';
@@ -456,34 +475,72 @@ class MisiScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: mission.categoryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            mission.categoryIcon,
-                            color: mission.categoryColor,
-                            size: 12,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            mission.categoryLabel,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: mission.categoryColor,
-                              fontWeight: FontWeight.bold,
+                          decoration: BoxDecoration(
+                            color: mission.categoryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                mission.categoryIcon,
+                                color: mission.categoryColor,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                mission.categoryLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: mission.categoryColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (mission.category == 'mobility' &&
+                            mission.targetDistanceKm != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE3F2FD),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.flag,
+                                  color: Color(0xFF1565C0),
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Target ${mission.targetDistanceKm!.toStringAsFixed(1)} KM',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Color(0xFF1565C0),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -575,6 +632,74 @@ class MisiScreen extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Kartu misi yang sudah verified hari ini — terkunci sampai besok.
+  Widget _buildCompletedCard(Mission mission) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F8E9),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: const Color(0xFF1B8039), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: Color(0xFF1B8039),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check, color: Colors.white, size: 30),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  mission.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B8039),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock, color: Colors.white, size: 12),
+                      SizedBox(width: 4),
+                      Text(
+                        'Selesai hari ini • Reset besok',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

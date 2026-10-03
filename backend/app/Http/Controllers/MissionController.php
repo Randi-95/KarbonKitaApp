@@ -13,6 +13,7 @@ use App\Models\WargaProfile;
 use App\Services\GeminiService;
 use App\Services\LevelService;
 use App\Services\StreakService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,8 @@ class MissionController extends Controller
     /**
      * GET /api/missions/active — daftar misi mobility & waste yang aktif.
      * Quiz dikecualikan (lewat Saga), inactive dikecualikan.
+     * Tiap item membawa `is_completed_today` (verified hari ini, WIB)
+     * untuk status harian 1x per misi.
      */
     public function index(): JsonResponse
     {
@@ -48,11 +51,62 @@ class MissionController extends Controller
             ->orderBy('id')
             ->get();
 
+        $completedIds = $this->completedTodayMissionIds(
+            (int) Auth::id(),
+            $missions->pluck('id')->all()
+        );
+
+        $missions->each(function ($mission) use ($completedIds) {
+            $mission->is_completed_today = in_array($mission->id, $completedIds, true);
+        });
+
         return response()->json([
             'success' => true,
             'message' => 'Active missions retrieved successfully.',
             'data' => MissionResource::collection($missions),
         ]);
+    }
+
+    /**
+     * ID misi yang sudah verified hari ini (WIB) oleh user.
+     * Satu-satunya pengunci harian 1x per misi (mobility & waste).
+     *
+     * @param  list<int>  $missionIds
+     * @return list<int>
+     */
+    private function completedTodayMissionIds(int $userId, array $missionIds): array
+    {
+        if ($missionIds === [] || $userId <= 0) {
+            return [];
+        }
+
+        $todayWib = Carbon::now(StreakService::TZ)->toDateString();
+
+        return UserMission::where('user_id', $userId)
+            ->whereIn('mission_id', $missionIds)
+            ->where('status', 'verified')
+            ->whereDate('created_at', $todayWib)
+            ->pluck('mission_id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function hasCompletedToday(int $userId, int $missionId): bool
+    {
+        return $this->completedTodayMissionIds($userId, [$missionId]) !== [];
+    }
+
+    private function dailyCapResponse(int $missionId): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => 'Misi sudah diselesaikan hari ini. Coba lagi besok!',
+            'data' => [
+                'mission_id' => $missionId,
+                'already_completed_today' => true,
+            ],
+        ], 409);
     }
 
     /**
@@ -73,6 +127,8 @@ class MissionController extends Controller
         $hash = hash_file('sha256', (string) $image->getRealPath());
 
         // Fast-path duplicate check sebelum simpan file / panggil AI.
+        // Didahulukan dari kunci harian agar fraud tetap terdeteksi
+        // spesifik sebagai duplikat, bukan sekadar sudah selesai.
         if (UserMission::where('proof_image_hash', $hash)->exists()) {
             $duplicate = UserMission::create([
                 'user_id' => $user->id,
@@ -91,6 +147,12 @@ class MissionController extends Controller
                     'status' => 'rejected',
                 ],
             ], 409);
+        }
+
+        // Kunci harian 1x per misi — setelah cek duplikat, sebelum panggil AI
+        // agar hemat biaya dan tetap spesifik untuk kasus fraud.
+        if ($this->hasCompletedToday((int) $user->id, (int) $mission->id)) {
+            return $this->dailyCapResponse((int) $mission->id);
         }
 
         $exifGps = $this->readExifGps((string) $image->getRealPath());
@@ -147,6 +209,12 @@ class MissionController extends Controller
             }
 
             $passes = $ai['is_valid'] && $gemini->passesThreshold($ai);
+
+            // Kunci harian dicek ulang setelah lock (anti race).
+            // Hanya hasil verified yang mengunci; rejected boleh coba lagi.
+            if ($passes && $this->hasCompletedToday((int) $user->id, (int) $mission->id)) {
+                return ['capped' => true, 'mission_id' => (int) $mission->id];
+            }
 
             $userMission = UserMission::create([
                 'user_id' => $user->id,
@@ -224,6 +292,10 @@ class MissionController extends Controller
             ];
         });
 
+        if (($result['capped'] ?? false) === true) {
+            return $this->dailyCapResponse((int) $result['mission_id']);
+        }
+
         if ($result['duplicate']) {
             return response()->json([
                 'success' => false,
@@ -255,8 +327,7 @@ class MissionController extends Controller
      * distance_km, duration_seconds, gps_coordinates_path [{lat, lng}].
      * Mapping kontrak → skema DB: activity_type → transport_mode,
      * duration_seconds → duration_minutes (ceil), path → start/end/route.
-     * Reward memakai xp/points penuh milik misi (didokumentasikan; daily cap
-     * adalah pekerjaan lanjutan di luar roadmap ini).
+     * Reward memakai xp/points penuh milik misi, dibatasi harian 1x per misi.
      */
     public function mobilitySync(MobilitySyncRequest $request): JsonResponse
     {
@@ -274,7 +345,33 @@ class MissionController extends Controller
             ], 422);
         }
 
+        // Kunci harian 1x per misi (terhadap misi hasil resolve).
+        if ($this->hasCompletedToday((int) $user->id, (int) $mission->id)) {
+            return $this->dailyCapResponse((int) $mission->id);
+        }
+
         $distanceKm = (float) $validated['distance_km'];
+
+        // Target jarak misi wajib tercapai (fallback 0,1 km bila tak diset).
+        $targetKm = $mission->target_distance_km !== null
+            ? (float) $mission->target_distance_km
+            : 0.1;
+
+        if ($distanceKm < $targetKm) {
+            return response()->json([
+                'success' => false,
+                'message' => sprintf(
+                    'Jarak belum mencapai target misi (%.2f KM).',
+                    $targetKm
+                ),
+                'data' => [
+                    'mission_id' => (int) $mission->id,
+                    'distance_km' => $distanceKm,
+                    'required_distance_km' => round($targetKm, 2),
+                ],
+            ], 422);
+        }
+
         $durationSeconds = (int) $validated['duration_seconds'];
         $avgSpeedKmh = $distanceKm / ($durationSeconds / 3600);
 
@@ -315,6 +412,11 @@ class MissionController extends Controller
 
             if (! $profile) {
                 throw new \Exception('User profile not found.');
+            }
+
+            // Cek ulang setelah lock (anti race sync bersamaan).
+            if ($this->hasCompletedToday((int) $user->id, (int) $mission->id)) {
+                return ['capped' => true, 'mission_id' => (int) $mission->id];
             }
 
             $userMission = UserMission::create([
@@ -384,6 +486,10 @@ class MissionController extends Controller
                 'streak_days' => $newStreak,
             ];
         });
+
+        if (($result['capped'] ?? false) === true) {
+            return $this->dailyCapResponse((int) $result['mission_id']);
+        }
 
         return response()->json([
             'success' => true,

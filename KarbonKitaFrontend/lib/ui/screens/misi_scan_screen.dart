@@ -1,16 +1,59 @@
-import 'package:camera/camera.dart';
-import 'package:flutter/material.dart';
+import 'dart:io';
 
+import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image/image.dart' as img;
+
+import '../../bloc/mission/mission_bloc.dart';
+import '../../bloc/mission/mission_event.dart';
+import '../../bloc/mission/mission_state.dart';
+import '../../models/verify_waste_result.dart';
 import '../widgets/mission_scan/scan_frame_painter.dart';
 import '../widgets/mission_scan/validation_result_sheet.dart';
+import '../widgets/mission_scan/waste_verify_dialogs.dart';
 
-/// Halaman "Validasi Misi Scan Kamera AI" (frontend-only).
+/// Kompresi foto hasil kamera di background isolate (pure-Dart).
+///
+/// Return path file siap upload (≤5MB sesuai `VerifyWasteRequest` backend).
+/// Gagal/berukuran kecil → return [originalPath] apa adanya.
+String _compressImage(String originalPath) {
+  try {
+    final bytes = File(originalPath).readAsBytesSync();
+    if (bytes.lengthInBytes <= 4 * 1024 * 1024) return originalPath;
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return originalPath;
+    final resized = decoded.width > 1080
+        ? img.copyResize(decoded, width: 1080)
+        : decoded;
+    var quality = 82;
+    var out = img.encodeJpg(resized, quality: quality);
+    while (out.length > 5 * 1024 * 1024 && quality > 55) {
+      quality -= 10;
+      out = img.encodeJpg(resized, quality: quality);
+    }
+    final target =
+        '${Directory.systemTemp.path}/karbonkita_waste_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    File(target).writeAsBytesSync(out);
+    return target;
+  } catch (_) {
+    return originalPath;
+  }
+}
+
+/// Halaman "Validasi Misi Scan Kamera AI".
 ///
 /// Dibuka dari tab Misi via tombol "Upload Foto" kartu kategori Sampah.
-/// Foto hasil [takePicture] hanya disimpan lokal sementara dan TIDAK
-/// diupload — validasi Gemini berjalan server-side (di luar scope file ini).
+/// Foto hasil [takePicture] dikompres lokal lalu diupload ke
+/// `POST /api/missions/verify-waste` via [MissionBloc]; validasi Gemini
+/// berjalan server-side.
 class MisiScanScreen extends StatefulWidget {
-  const MisiScanScreen({super.key, this.missionTitle = 'Misi Sampah', this.missionId});
+  const MisiScanScreen({
+    super.key,
+    this.missionTitle = 'Misi Sampah',
+    this.missionId,
+  });
 
   final String missionTitle;
   final int? missionId;
@@ -24,7 +67,10 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
   bool _isInitializing = true;
   String? _errorMessage;
   bool _flashOn = false;
-  bool _isAnalyzing = false;
+  bool _isCapturing = false;
+
+  /// Path foto terakhir (untuk retry 503/failure tanpa foto ulang).
+  String? _lastImagePath;
 
   @override
   void initState() {
@@ -106,52 +152,166 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
 
   Future<void> _onShutter() async {
     final controller = _controller;
-    if (controller == null || !controller.value.isInitialized || _isAnalyzing) {
+    if (controller == null || !controller.value.isInitialized || _isCapturing) {
       return;
     }
-    setState(() => _isAnalyzing = true);
+    final missionId = widget.missionId;
+    if (missionId == null) {
+      _snack('Misi tidak valid. Kembali lalu coba lagi.');
+      return;
+    }
+    setState(() => _isCapturing = true);
     try {
-      // Frontend-only: file foto disimpan lokal, belum diupload ke backend.
-      await controller.takePicture();
-      // Simulasi analisis AI lokal (mock, tanpa backend).
-      await Future.delayed(const Duration(seconds: 2));
+      final photo = await controller.takePicture();
+      // Kompres di isolate agar UI tidak macet, lalu kirim ke backend.
+      final uploadPath = await compute(_compressImage, photo.path);
       if (!mounted) return;
-      await showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        builder: (_) => ValidationResultSheet(
-          onContinue: () {
-            Navigator.pop(context); // tutup sheet
-            Navigator.pop(context, true); // kembali ke layar Misi
-          },
-        ),
+      _lastImagePath = uploadPath;
+      context.read<MissionBloc>().add(
+        WasteVerifyRequested(missionId: missionId, imagePath: uploadPath),
       );
     } on CameraException {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gagal mengambil foto. Coba lagi.')),
-        );
+        _snack('Gagal mengambil foto. Coba lagi.');
       }
     } finally {
-      if (mounted) setState(() => _isAnalyzing = false);
+      if (mounted) setState(() => _isCapturing = false);
     }
   }
+
+  void _retryUpload() {
+    final missionId = widget.missionId;
+    final imagePath = _lastImagePath;
+    if (missionId == null || imagePath == null) {
+      _snack('Foto sebelumnya hilang. Ambil foto baru.');
+      return;
+    }
+    context.read<MissionBloc>().add(
+      WasteVerifyRequested(missionId: missionId, imagePath: imagePath),
+    );
+  }
+
+  void _resetVerify() {
+    context.read<MissionBloc>().add(const WasteVerifyReset());
+  }
+
+  void _backToMissions({Object? result}) {
+    _resetVerify();
+    if (mounted) Navigator.pop(context, result);
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // ---------- Bloc listener ----------
+
+  void _onVerifyState(BuildContext context, MissionState state) {
+    switch (state.wasteVerifyStatus) {
+      case WasteVerifyStatus.verified:
+        final result = state.verifyResult;
+        if (result != null) _showResultSheet(result);
+      case WasteVerifyStatus.rejected:
+        final result = state.verifyResult;
+        if (result != null) _showResultSheet(result);
+      case WasteVerifyStatus.duplicate:
+        showDuplicateWasteDialog(
+          context,
+          message:
+              state.wasteVerifyErrorMessage ??
+              'Foto ini sudah pernah dipakai orang lain.',
+          onBackToMissions: () => _backToMissions(),
+        );
+      case WasteVerifyStatus.dailyCapped:
+        showDailyCappedWasteDialog(
+          context,
+          message:
+              state.wasteVerifyErrorMessage ??
+              'Misi ini sudah diselesaikan hari ini.',
+          onBackToMissions: () => _backToMissions(),
+        );
+      case WasteVerifyStatus.pendingReview:
+        showPendingWasteDialog(
+          context,
+          message:
+              state.wasteVerifyErrorMessage ??
+              'AI sedang sibuk. Foto masuk antrean.',
+          onRetry: _retryUpload,
+          onBackToMissions: () => _backToMissions(),
+        );
+      case WasteVerifyStatus.failure:
+        showWasteFailureDialog(
+          context,
+          message:
+              state.wasteVerifyErrorMessage ??
+              'Terjadi kesalahan jaringan. Coba lagi.',
+          onRetry: _retryUpload,
+          onBackToMissions: () => _backToMissions(),
+        );
+      case WasteVerifyStatus.initial:
+      case WasteVerifyStatus.uploading:
+        break;
+    }
+  }
+
+  Future<void> _showResultSheet(VerifyWasteResult result) async {
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ValidationResultSheet(
+        result: result,
+        onContinue: () {
+          Navigator.pop(context); // tutup sheet
+          _backToMissions(result: true); // kembali ke layar Misi
+        },
+        onRetry: result.verified
+            ? null
+            : () {
+                Navigator.pop(context); // tutup sheet, tetap di kamera
+                _resetVerify();
+              },
+      ),
+    );
+  }
+
+  // ---------- UI ----------
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(backgroundColor: Colors.black, body: _buildBody());
-  }
-
-  Widget _buildBody() {
-    if (_isInitializing) return _buildLoading();
-    if (_errorMessage != null || _controller == null) {
-      return _buildCameraError();
-    }
-    return _buildCameraView();
+    return BlocListener<MissionBloc, MissionState>(
+      listenWhen: (prev, curr) =>
+          prev.wasteVerifyStatus != curr.wasteVerifyStatus,
+      listener: _onVerifyState,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: BlocBuilder<MissionBloc, MissionState>(
+          buildWhen: (prev, curr) =>
+              prev.wasteVerifyStatus != curr.wasteVerifyStatus,
+          builder: (context, state) {
+            final uploading =
+                state.wasteVerifyStatus == WasteVerifyStatus.uploading;
+            if (_isInitializing) return _buildLoading();
+            if (_errorMessage != null || _controller == null) {
+              return _buildCameraError();
+            }
+            return _buildCameraView(
+              busy: _isCapturing || uploading,
+              busyLabel: uploading
+                  ? 'Mengupload & AI menganalisis foto...\nBisa memakan waktu ~20 detik'
+                  : 'Menyiapkan foto...',
+            );
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildLoading() {
@@ -198,7 +358,7 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
     );
   }
 
-  Widget _buildCameraView() {
+  Widget _buildCameraView({required bool busy, required String busyLabel}) {
     return Stack(
       children: [
         Positioned.fill(child: _buildPreview()),
@@ -211,12 +371,12 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
               const Spacer(),
               _buildScanFrame(),
               const Spacer(),
-              _buildShutter(),
+              _buildShutter(busy: busy),
               const SizedBox(height: 24),
             ],
           ),
         ),
-        if (_isAnalyzing) _buildAnalyzingOverlay(),
+        if (busy) _buildAnalyzingOverlay(busyLabel),
       ],
     );
   }
@@ -350,11 +510,11 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
     );
   }
 
-  Widget _buildShutter() {
+  Widget _buildShutter({required bool busy}) {
     return GestureDetector(
-      onTap: _isAnalyzing ? null : _onShutter,
+      onTap: busy ? null : _onShutter,
       child: Opacity(
-        opacity: _isAnalyzing ? 0.6 : 1,
+        opacity: busy ? 0.6 : 1,
         child: Container(
           width: 72,
           height: 72,
@@ -378,7 +538,7 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
     );
   }
 
-  Widget _buildAnalyzingOverlay() {
+  Widget _buildAnalyzingOverlay(String label) {
     return Positioned.fill(
       child: Container(
         color: Colors.black.withValues(alpha: 0.35),
@@ -389,10 +549,10 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
               color: Colors.black.withValues(alpha: 0.65),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Column(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 28,
                   height: 28,
                   child: CircularProgressIndicator(
@@ -400,10 +560,11 @@ class _MisiScanScreenState extends State<MisiScanScreen> {
                     strokeWidth: 3,
                   ),
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 10),
                 Text(
-                  'AI sedang menganalisis foto...',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ],
             ),

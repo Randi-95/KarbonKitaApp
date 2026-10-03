@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../bloc/carbon_calculator/carbon_calculator_cubit.dart';
 import 'emission_gauge_painter.dart';
 
 class EmissionGaugeCard extends StatelessWidget {
@@ -6,10 +7,25 @@ class EmissionGaugeCard extends StatelessWidget {
     super.key,
     required this.emissionKg,
     required this.progress,
+    required this.category,
+    required this.offsetKm,
   });
 
   final double emissionKg;
   final double progress;
+  final CarbonCategory category;
+  final double offsetKm;
+
+  String get _meaningText {
+    switch (category) {
+      case CarbonCategory.kendaraan:
+        return 'Emisi ini berasal dari penggunaan kendaraan bermotor Anda selama 1 bulan.';
+      case CarbonCategory.listrik:
+        return 'Emisi ini berasal dari pemakaian listrik rumah Anda selama 1 bulan.';
+      case CarbonCategory.gas:
+        return 'Emisi ini berasal dari pemakaian gas LPG Anda selama 1 bulan.';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,12 +105,12 @@ class EmissionGaugeCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
+                    const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.eco, color: Color(0xFF43A047), size: 14),
@@ -109,13 +125,23 @@ class EmissionGaugeCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
                     Text(
-                      'Emisi ini berasal dari penggunaan kendaraan bermotor Anda selama 1 bulan.',
-                      style: TextStyle(
+                      _meaningText,
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
                         height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Setara ${offsetKm.toStringAsFixed(offsetKm >= 100 ? 0 : 1)} km bersepeda untuk mengimbanginya.',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2E7D32),
+                        height: 1.4,
                       ),
                     ),
                   ],

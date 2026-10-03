@@ -1,7 +1,23 @@
 import '../../models/mission.dart';
+import '../../models/verify_waste_result.dart';
 
 /// Status muat misi.
 enum MissionStatus { initial, loading, loaded, error }
+
+/// Status sinkronisasi mobilitas (terpisah dari status daftar misi).
+enum MobilitySyncStatus { initial, syncing, success, failure }
+
+/// Status verifikasi sampah via AI (terpisah dari status daftar misi).
+enum WasteVerifyStatus {
+  initial,
+  uploading,
+  verified,
+  rejected,
+  duplicate,
+  dailyCapped,
+  pendingReview,
+  failure,
+}
 
 class MissionState {
   const MissionState({
@@ -13,6 +29,13 @@ class MissionState {
     this.errorMessage,
     this.isOffline = false,
     this.lastUpdated,
+    this.mobilityStatus = MobilitySyncStatus.initial,
+    this.mobilityResult,
+    this.mobilityErrorMessage,
+    this.wasteVerifyStatus = WasteVerifyStatus.initial,
+    this.verifyResult,
+    this.wasteVerifyErrorMessage,
+    this.wasteVerifyData,
   });
 
   final MissionStatus status;
@@ -25,6 +48,20 @@ class MissionState {
   /// True bila data berasal dari cache offline.
   final bool isOffline;
   final DateTime? lastUpdated;
+
+  /// Hasil sync mobilitas terakhir (isi `data` dari envelope backend).
+  final MobilitySyncStatus mobilityStatus;
+  final Map<String, dynamic>? mobilityResult;
+  final String? mobilityErrorMessage;
+
+  /// Hasil verifikasi sampah terakhir (isi `data` envelope 200/201).
+  final WasteVerifyStatus wasteVerifyStatus;
+  final VerifyWasteResult? verifyResult;
+  final String? wasteVerifyErrorMessage;
+
+  /// Payload `data` mentah untuk kasus error 409/503 (berisi
+  /// user_mission_id / already_completed_today dari backend).
+  final Map<String, dynamic>? wasteVerifyData;
 
   /// Semua misi non-kuis (untuk tab 'Semua'). Kuis hanya lewat FAB.
   List<Mission> get allMissions => missions;
@@ -43,6 +80,13 @@ class MissionState {
     String? errorMessage,
     bool? isOffline,
     DateTime? lastUpdated,
+    MobilitySyncStatus? mobilityStatus,
+    Object? mobilityResult = _noChange,
+    Object? mobilityErrorMessage = _noChange,
+    WasteVerifyStatus? wasteVerifyStatus,
+    Object? verifyResult = _noChange,
+    Object? wasteVerifyErrorMessage = _noChange,
+    Object? wasteVerifyData = _noChange,
   }) {
     return MissionState(
       status: status ?? this.status,
@@ -55,6 +99,23 @@ class MissionState {
       errorMessage: errorMessage,
       isOffline: isOffline ?? this.isOffline,
       lastUpdated: lastUpdated ?? this.lastUpdated,
+      mobilityStatus: mobilityStatus ?? this.mobilityStatus,
+      mobilityResult: mobilityResult == _noChange
+          ? this.mobilityResult
+          : mobilityResult as Map<String, dynamic>?,
+      mobilityErrorMessage: mobilityErrorMessage == _noChange
+          ? this.mobilityErrorMessage
+          : mobilityErrorMessage as String?,
+      wasteVerifyStatus: wasteVerifyStatus ?? this.wasteVerifyStatus,
+      verifyResult: verifyResult == _noChange
+          ? this.verifyResult
+          : verifyResult as VerifyWasteResult?,
+      wasteVerifyErrorMessage: wasteVerifyErrorMessage == _noChange
+          ? this.wasteVerifyErrorMessage
+          : wasteVerifyErrorMessage as String?,
+      wasteVerifyData: wasteVerifyData == _noChange
+          ? this.wasteVerifyData
+          : wasteVerifyData as Map<String, dynamic>?,
     );
   }
 

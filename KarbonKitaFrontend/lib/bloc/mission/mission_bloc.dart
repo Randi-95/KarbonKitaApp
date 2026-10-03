@@ -12,7 +12,10 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     on<QuizzesLoaded>(_onQuizzesLoaded);
     on<MissionsFiltered>(_onMissionsFiltered);
     on<MobilitySynced>(_onMobilitySynced);
+    on<MobilitySyncReset>(_onMobilitySyncReset);
     on<QuizAnswerSubmitted>(_onQuizAnswerSubmitted);
+    on<WasteVerifyRequested>(_onWasteVerifyRequested);
+    on<WasteVerifyReset>(_onWasteVerifyReset);
   }
 
   final MissionRepository _repository;
@@ -23,7 +26,10 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
   ) async {
     // Cache memory sesi masih dianggap tampil — tapi pastikan juga
     // cache Hive dimuat saat app baru dibuka (missions kosong).
-    if (state.status == MissionStatus.loaded && state.missions.isNotEmpty) {
+    // force=true (setelah misi selesai) melewati short-circuit ini.
+    if (!event.force &&
+        state.status == MissionStatus.loaded &&
+        state.missions.isNotEmpty) {
       return;
     }
     try {
@@ -161,22 +167,58 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
     MobilitySynced event,
     Emitter<MissionState> emit,
   ) async {
+    emit(
+      state.copyWith(
+        mobilityStatus: MobilitySyncStatus.syncing,
+        mobilityErrorMessage: null,
+      ),
+    );
     try {
-      await _repository.syncMobility(
+      final envelope = await _repository.syncMobility(
         missionId: event.missionId,
         activityType: event.activityType,
         distanceKm: event.distanceKm,
         durationSeconds: event.durationSeconds,
         gpsCoordinatesPath: event.gpsCoordinatesPath,
       );
-      // Success - bisa emit event tambahan jika perlu refresh data
+      final data = envelope['data'];
+      emit(
+        state.copyWith(
+          mobilityStatus: MobilitySyncStatus.success,
+          mobilityResult: data is Map<String, dynamic>
+              ? data
+              : <String, dynamic>{'raw': data},
+          mobilityErrorMessage: null,
+        ),
+      );
     } on MissionException catch (e) {
-      emit(state.copyWith(errorMessage: e.message));
-      rethrow; // Biarkan UI handle error
+      emit(
+        state.copyWith(
+          mobilityStatus: MobilitySyncStatus.failure,
+          mobilityErrorMessage: e.message,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(errorMessage: 'Gagal sinkronisasi: $e'));
-      rethrow;
+      emit(
+        state.copyWith(
+          mobilityStatus: MobilitySyncStatus.failure,
+          mobilityErrorMessage: 'Gagal sinkronisasi: $e',
+        ),
+      );
     }
+  }
+
+  void _onMobilitySyncReset(
+    MobilitySyncReset event,
+    Emitter<MissionState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        mobilityStatus: MobilitySyncStatus.initial,
+        mobilityResult: null,
+        mobilityErrorMessage: null,
+      ),
+    );
   }
 
   Future<void> _onQuizAnswerSubmitted(
@@ -196,5 +238,102 @@ class MissionBloc extends Bloc<MissionEvent, MissionState> {
       emit(state.copyWith(errorMessage: 'Gagal submit jawaban: $e'));
       rethrow;
     }
+  }
+
+  Future<void> _onWasteVerifyRequested(
+    WasteVerifyRequested event,
+    Emitter<MissionState> emit,
+  ) async {
+    emit(
+      state.copyWith(
+        wasteVerifyStatus: WasteVerifyStatus.uploading,
+        wasteVerifyErrorMessage: null,
+        wasteVerifyData: null,
+      ),
+    );
+    try {
+      final result = await _repository.verifyWaste(
+        missionId: event.missionId,
+        imagePath: event.imagePath,
+      );
+      if (result.verified) {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.verified,
+            verifyResult: result,
+            wasteVerifyErrorMessage: null,
+          ),
+        );
+        // Refresh kunci harian agar kartu misi terkunci seperti mobility.
+        add(const MissionsLoaded(force: true));
+      } else if (result.status == 'rejected') {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.rejected,
+            verifyResult: result,
+            wasteVerifyErrorMessage: null,
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.pendingReview,
+            verifyResult: result,
+            wasteVerifyErrorMessage: null,
+          ),
+        );
+      }
+    } on MissionException catch (e) {
+      if (e.statusCode == 409) {
+        // Backend bedakan via data: {already_completed_today: true}
+        // = daily-cap, selain itu = foto duplikat (anti-fraud).
+        final alreadyCapped = e.data?['already_completed_today'] == true;
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: alreadyCapped
+                ? WasteVerifyStatus.dailyCapped
+                : WasteVerifyStatus.duplicate,
+            wasteVerifyErrorMessage: e.message,
+            wasteVerifyData: e.data,
+          ),
+        );
+        return;
+      }
+      if (e.statusCode == 503) {
+        emit(
+          state.copyWith(
+            wasteVerifyStatus: WasteVerifyStatus.pendingReview,
+            wasteVerifyErrorMessage: e.message,
+            wasteVerifyData: e.data,
+          ),
+        );
+        return;
+      }
+      emit(
+        state.copyWith(
+          wasteVerifyStatus: WasteVerifyStatus.failure,
+          wasteVerifyErrorMessage: e.message,
+          wasteVerifyData: e.data,
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(
+          wasteVerifyStatus: WasteVerifyStatus.failure,
+          wasteVerifyErrorMessage: 'Gagal verifikasi: $e',
+        ),
+      );
+    }
+  }
+
+  void _onWasteVerifyReset(WasteVerifyReset event, Emitter<MissionState> emit) {
+    emit(
+      state.copyWith(
+        wasteVerifyStatus: WasteVerifyStatus.initial,
+        verifyResult: null,
+        wasteVerifyErrorMessage: null,
+        wasteVerifyData: null,
+      ),
+    );
   }
 }

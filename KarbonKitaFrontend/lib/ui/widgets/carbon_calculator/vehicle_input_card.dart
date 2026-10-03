@@ -2,39 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../bloc/carbon_calculator/carbon_calculator_cubit.dart';
 import 'emission_slider_row.dart';
+import 'vehicle_type_selector.dart';
 
 class VehicleInputCard extends StatelessWidget {
   const VehicleInputCard({super.key});
 
-  void _showGuide(BuildContext context) {
+  void _showGuide(BuildContext context, VehicleType type) {
+    final consumption = type.consumptionKmPerLiter;
+    final typeLabel = type.label;
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => const Padding(
-        padding: EdgeInsets.all(20),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Panduan Pengisian',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
-              '• Jarak tempuh: total kilometer motor Anda selama 1 bulan (0–1000 km).\n'
+              '• Jarak tempuh: total kilometer $typeLabel Anda selama 1 bulan (0–1000 km).\n'
               '• Konsumsi BBM: total liter yang dibeli selama 1 bulan (0–50 L).\n'
-              '• Bila konsumsi 0 tapi jarak diisi, emisi diestimasi dari jarak ÷ 40 km/L.\n'
+              '• Bila konsumsi 0 tapi jarak diisi, emisi diestimasi dari jarak ÷ $consumption km/L.\n'
               '• Emisi = liter × faktor emisi (Bensin 2,31 / Solar 2,68 kg CO₂e/L).',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 color: Colors.black87,
                 height: 1.6,
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -98,7 +101,7 @@ class VehicleInputCard extends StatelessWidget {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => _showGuide(context),
+                    onTap: () => _showGuide(context, state.vehicleType),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -118,9 +121,16 @@ class VehicleInputCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
+              VehicleTypeSelector(
+                selected: state.vehicleType,
+                onSelected: cubit.updateVehicleType,
+              ),
+              const SizedBox(height: 16),
               EmissionSliderRow(
                 icon: Icons.two_wheeler,
-                label: 'Jarak Tempuh Motor',
+                label: state.vehicleType == VehicleType.motor
+                    ? 'Jarak Tempuh Motor'
+                    : 'Jarak Tempuh Mobil',
                 value: state.jarakKm,
                 min: 0,
                 max: 1000,
@@ -164,6 +174,9 @@ class VehicleInputCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<FuelType>(
+                // Pakai key agar dropdown me-reset saat tipe kendaraan berubah
+                // dan BBM lama tak lagi valid (mis. Solar untuk Motor).
+                key: ValueKey(state.vehicleType),
                 initialValue: state.fuelType,
                 decoration: InputDecoration(
                   contentPadding: const EdgeInsets.symmetric(
@@ -180,7 +193,7 @@ class VehicleInputCard extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.keyboard_arrow_down),
-                items: FuelType.values
+                items: state.vehicleType.allowedFuels
                     .map(
                       (f) => DropdownMenuItem(
                         value: f,

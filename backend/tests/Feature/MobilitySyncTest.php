@@ -364,18 +364,20 @@ class MobilitySyncTest extends TestCase
     public function test_stats_accumulate_across_syncs(): void
     {
         $user = $this->makeWarga();
-        $this->makeMobilityMission();
+        $first = $this->makeMobilityMission();
+        $second = $this->makeMobilityMission(['title' => 'Jalan Kaki 3Km']);
 
         $this->postJson(
             '/api/missions/mobility-sync',
-            $this->validPayload(['distance_km' => 2, 'duration_seconds' => 1200]),
+            array_merge($this->validPayload(['distance_km' => 2, 'duration_seconds' => 1200]), ['mission_id' => $first->id]),
             $this->authHeader($user)
         )->assertStatus(201);
 
+        // Misi berbeda hari yang sama tetap dapat reward (kunci per misi).
         // 3 km dalam 1800 detik = 6 km/h -> valid.
         $this->postJson(
             '/api/missions/mobility-sync',
-            $this->validPayload(['distance_km' => 3, 'duration_seconds' => 1800]),
+            array_merge($this->validPayload(['distance_km' => 3, 'duration_seconds' => 1800]), ['mission_id' => $second->id]),
             $this->authHeader($user)
         )->assertStatus(201);
 
@@ -386,6 +388,121 @@ class MobilitySyncTest extends TestCase
         $this->assertEquals(1.05, (float) $profile->total_carbon_saved_kg);
         $this->assertEquals(2, MobilityLog::where('user_id', $user->id)->count());
         $this->assertEquals(2, PointTransaction::where('user_id', $user->id)->count());
+    }
+
+    public function test_below_target_distance_returns_422(): void
+    {
+        $user = $this->makeWarga();
+        $mission = $this->makeMobilityMission(['target_distance_km' => 2.0]);
+
+        // 1 km dalam 600 detik = 6 km/h (kecepatan valid, jarak kurang).
+        $this->postJson(
+            '/api/missions/mobility-sync',
+            array_merge(
+                $this->validPayload(['distance_km' => 1, 'duration_seconds' => 600]),
+                ['mission_id' => $mission->id]
+            ),
+            $this->authHeader($user)
+        )->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('data.required_distance_km', 2);
+
+        $this->assertEquals(0, UserMission::where('user_id', $user->id)->count());
+        $this->assertEquals(0, WargaProfile::where('user_id', $user->id)->first()->eco_points);
+    }
+
+    public function test_at_target_distance_passes(): void
+    {
+        $user = $this->makeWarga();
+        $mission = $this->makeMobilityMission(['target_distance_km' => 2.0]);
+
+        $this->postJson(
+            '/api/missions/mobility-sync',
+            array_merge($this->validPayload(), ['mission_id' => $mission->id]),
+            $this->authHeader($user)
+        )->assertStatus(201);
+    }
+
+    public function test_active_list_includes_target_distance(): void
+    {
+        $user = $this->makeWarga();
+        $mission = $this->makeMobilityMission(['target_distance_km' => 2.0]);
+
+        $list = $this->getJson('/api/missions/active', $this->authHeader($user));
+        $list->assertOk();
+        $this->assertEquals(
+            2.0,
+            (float) collect($list->json('data'))->firstWhere('id', $mission->id)['target_distance_km']
+        );
+    }
+
+    public function test_same_mission_twice_same_day_returns_409(): void
+    {
+        $user = $this->makeWarga();
+        $mission = $this->makeMobilityMission();
+
+        $this->postJson(
+            '/api/missions/mobility-sync',
+            array_merge($this->validPayload(), ['mission_id' => $mission->id]),
+            $this->authHeader($user)
+        )->assertStatus(201);
+
+        $pointsAfterFirst = WargaProfile::where('user_id', $user->id)->first()->eco_points;
+
+        $this->postJson(
+            '/api/missions/mobility-sync',
+            array_merge($this->validPayload(), ['mission_id' => $mission->id]),
+            $this->authHeader($user)
+        )->assertStatus(409)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('data.already_completed_today', true);
+
+        // Poin tidak bertambah dari sync kedua.
+        $this->assertEquals(
+            $pointsAfterFirst,
+            WargaProfile::where('user_id', $user->id)->first()->eco_points
+        );
+        $this->assertEquals(1, MobilityLog::where('user_id', $user->id)->count());
+    }
+
+    public function test_same_mission_next_day_allowed(): void
+    {
+        $user = $this->makeWarga();
+        $mission = $this->makeMobilityMission();
+
+        $this->postJson(
+            '/api/missions/mobility-sync',
+            array_merge($this->validPayload(), ['mission_id' => $mission->id]),
+            $this->authHeader($user)
+        )->assertStatus(201);
+
+        $this->travel(1)->day();
+
+        $this->postJson(
+            '/api/missions/mobility-sync',
+            array_merge($this->validPayload(), ['mission_id' => $mission->id]),
+            $this->authHeader($user)
+        )->assertStatus(201);
+    }
+
+    public function test_active_list_marks_completed_today(): void
+    {
+        $user = $this->makeWarga();
+        $mission = $this->makeMobilityMission();
+
+        $list = $this->getJson('/api/missions/active', $this->authHeader($user));
+        $list->assertOk();
+        $this->assertFalse((bool) collect($list->json('data'))->firstWhere('id', $mission->id)['is_completed_today']);
+
+        $this->postJson(
+            '/api/missions/mobility-sync',
+            array_merge($this->validPayload(), ['mission_id' => $mission->id]),
+            $this->authHeader($user)
+        )->assertStatus(201);
+
+        $list = $this->getJson('/api/missions/active', $this->authHeader($user));
+        $list->assertOk();
+        $this->assertTrue((bool) collect($list->json('data'))->firstWhere('id', $mission->id)['is_completed_today']);
     }
 
     public function test_invalid_token_returns_401(): void

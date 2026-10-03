@@ -71,31 +71,39 @@ class MissionRemoteDatasource {
   }
 
   /// POST /api/missions/verify-waste
-  /// Upload foto untuk validasi AI sampah.
-  /// TODO: Implement saat image upload diperlukan.
+  /// Upload foto untuk validasi AI sampah (multipart: mission_id + image).
+  /// Return envelope mentah; 409/422/503 diteruskan sebagai exception
+  /// dengan `data` payload dari backend.
   Future<Map<String, dynamic>> verifyWaste({
     required int missionId,
     required String imagePath,
   }) async {
-    throw UnimplementedError('Image upload belum diimplementasikan');
+    final envelope = await _client.postMultipart(
+      ApiEndpoints.verifyWaste,
+      fields: <String, dynamic>{'mission_id': missionId},
+      filePath: imagePath,
+      fileField: 'image',
+    );
+    return envelope;
   }
 
   /// POST /api/missions/mobility-sync
   /// Sinkronisasi data mobilitas (GPS, jarak, durasi).
   Future<Map<String, dynamic>> mobilitySync({
-    required int missionId,
+    int? missionId,
     required String activityType, // 'cycling' | 'walking'
     required double distanceKm,
     required int durationSeconds,
     required List<Map<String, double>> gpsCoordinatesPath,
   }) async {
-    final envelope = await _client.post(ApiEndpoints.mobilitySync, {
-      'mission_id': missionId,
+    final body = <String, dynamic>{
       'activity_type': activityType,
       'distance_km': distanceKm,
       'duration_seconds': durationSeconds,
       'gps_coordinates_path': gpsCoordinatesPath,
-    });
+    };
+    if (missionId != null) body['mission_id'] = missionId;
+    final envelope = await _client.post(ApiEndpoints.mobilitySync, body);
     return envelope;
   }
 

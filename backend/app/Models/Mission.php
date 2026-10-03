@@ -17,6 +17,7 @@ class Mission extends Model
         'category',
         'xp_reward',
         'points_reward',
+        'target_distance_km',
         'icon',
         'max_participants',
         'is_active',
@@ -26,6 +27,7 @@ class Mission extends Model
     {
         return [
             'is_active' => 'boolean',
+            'target_distance_km' => 'decimal:2',
         ];
     }
 
