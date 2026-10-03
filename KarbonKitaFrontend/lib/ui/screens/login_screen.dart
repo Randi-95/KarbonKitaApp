@@ -5,6 +5,7 @@ import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
 import '../../bloc/auth/auth_state.dart';
 import 'register_screen.dart';
+import 'mitra_register_screen.dart';
 import 'merchant_dashboard_screen.dart';
 import 'admin_validation_screen.dart';
 
@@ -455,6 +456,37 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                         child: const Text(
                           'Daftar di sini',
+                          style: TextStyle(
+                            color: Color(0xFF1B8039),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Link daftar mitra UMKM (form + dokumen terpisah).
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Punya usaha? ',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const MitraRegisterScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Daftar sebagai Mitra',
                           style: TextStyle(
                             color: Color(0xFF1B8039),
                             fontWeight: FontWeight.bold,

@@ -6,6 +6,7 @@ import '../../bloc/auth/auth_event.dart';
 import '../../bloc/voucher/voucher_bloc.dart';
 import '../../bloc/voucher/voucher_event.dart';
 import '../../bloc/voucher/voucher_state.dart';
+import '../../core/network/api_endpoints.dart';
 import '../../models/voucher.dart';
 import 'dompet_voucher_screen.dart';
 
@@ -634,24 +635,33 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(15),
               ),
-              child: voucher.imageUrl.isNotEmpty
-                  ? Image.network(
-                      voucher.imageUrl,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey.shade200,
-                        child: const Center(
-                          child: Icon(Icons.image, color: Colors.grey),
-                        ),
+              child: Builder(
+                builder: (context) {
+                  // Samakan host URL gambar dengan baseUrl aplikasi.
+                  final imageUrl = ApiEndpoints.resolveImageUrl(
+                    voucher.imageUrl,
+                  );
+                  if (imageUrl.isEmpty) {
+                    return Container(
+                      color: Colors.grey.shade200,
+                      child: const Center(
+                        child: Icon(Icons.image, color: Colors.grey),
                       ),
-                    )
-                  : Container(
+                    );
+                  }
+                  return Image.network(
+                    imageUrl,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
                       color: Colors.grey.shade200,
                       child: const Center(
                         child: Icon(Icons.image, color: Colors.grey),
                       ),
                     ),
+                  );
+                },
+              ),
             ),
           ),
           Expanded(

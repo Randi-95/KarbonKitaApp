@@ -5,6 +5,7 @@ import 'bloc/auth/auth_bloc.dart';
 import 'bloc/auth/auth_event.dart';
 import 'bloc/auth/auth_state.dart';
 import 'bloc/activity/activity_bloc.dart';
+import 'bloc/admin_merchant/admin_merchant_bloc.dart';
 import 'bloc/dashboard/dashboard_bloc.dart';
 import 'bloc/leaderboard/leaderboard_bloc.dart';
 import 'bloc/level/level_bloc.dart';
@@ -16,12 +17,14 @@ import 'core/network/connectivity_service.dart';
 import 'core/network/dio_client.dart';
 import 'core/storage/cache_service.dart';
 import 'core/storage/token_storage.dart';
+import 'data/datasources/admin_merchant_remote_datasource.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/leaderboard_remote_datasource.dart';
 import 'data/datasources/merchant_remote_datasource.dart';
 import 'data/datasources/mission_remote_datasource.dart';
 import 'data/datasources/profile_remote_datasource.dart';
 import 'data/datasources/voucher_remote_datasource.dart';
+import 'data/repositories/admin_merchant_repository.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/leaderboard_repository.dart';
 import 'data/repositories/merchant_repository.dart';
@@ -81,6 +84,9 @@ Future<void> main() async {
       storage: storage,
     ),
   );
+  final adminMerchantBloc = AdminMerchantBloc(
+    AdminMerchantRepository(AdminMerchantRemoteDatasource(dioClient)),
+  );
 
   runApp(
     MyApp(
@@ -93,6 +99,7 @@ Future<void> main() async {
       levelBloc: levelBloc,
       activityBloc: activityBloc,
       merchantBloc: merchantBloc,
+      adminMerchantBloc: adminMerchantBloc,
       connectivity: connectivity,
     ),
   );
@@ -110,6 +117,7 @@ class MyApp extends StatelessWidget {
     required this.levelBloc,
     required this.activityBloc,
     required this.merchantBloc,
+    required this.adminMerchantBloc,
     required this.connectivity,
   });
 
@@ -122,6 +130,7 @@ class MyApp extends StatelessWidget {
   final LevelBloc levelBloc;
   final ActivityBloc activityBloc;
   final MerchantBloc merchantBloc;
+  final AdminMerchantBloc adminMerchantBloc;
   final ConnectivityService connectivity;
 
   @override
@@ -137,6 +146,7 @@ class MyApp extends StatelessWidget {
         BlocProvider.value(value: levelBloc),
         BlocProvider.value(value: activityBloc),
         BlocProvider.value(value: merchantBloc),
+        BlocProvider.value(value: adminMerchantBloc),
       ],
       child: MaterialApp(
         title: 'KarbonKita',

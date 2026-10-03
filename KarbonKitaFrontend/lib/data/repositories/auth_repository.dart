@@ -1,6 +1,9 @@
+import 'package:image_picker/image_picker.dart';
+
 import '../../core/storage/cache_service.dart';
 import '../../core/storage/token_storage.dart';
 import '../../models/auth_response.dart';
+import '../../models/mitra_register_result.dart';
 import '../../models/user.dart';
 import '../datasources/auth_remote_datasource.dart';
 
@@ -98,5 +101,24 @@ class AuthRepository {
     await _storage.clearAll();
     // Ganti user = cache user lama tidak boleh terlihat.
     await _cache?.clearAll();
+  }
+
+  /// Daftar mitra baru (multipart + foto). Backend langsung mengembalikan
+  /// token → sesi disimpan seperti login (auto-login, status pending).
+  Future<MitraRegisterResult> registerMitra({
+    required Map<String, dynamic> fields,
+    required Map<String, XFile?> files,
+  }) async {
+    final result = await _remote.registerMitra(fields: fields, files: files);
+    if (result.token.isEmpty) {
+      throw const FormatException('Token kosong dari server.');
+    }
+    await _storage.saveToken(result.token);
+    await _storage.saveUser(
+      id: result.user.id,
+      name: result.user.name,
+      role: result.user.role,
+    );
+    return result;
   }
 }

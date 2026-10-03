@@ -123,6 +123,35 @@ class DioClient {
     }
   }
 
+  /// POST multipart multi-file (mis. register mitra: KTP/NIB/foto toko).
+  ///
+  /// Terima [files] yang sudah berupa [MultipartFile] jadi caller
+  /// (datasource) yang memilih cara bangun per platform: `fromFile` di
+  /// mobile, `fromBytes` di web (path blob tidak bisa dibaca via dart:io).
+  Future<Map<String, dynamic>> postMultipartFiles(
+    String path, {
+    required Map<String, dynamic> fields,
+    required Map<String, MultipartFile> files,
+  }) async {
+    try {
+      final formData = FormData.fromMap({...fields, ...files});
+      final res = await _dio.post(
+        path,
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      final data = res.data;
+      if (data is Map<String, dynamic>) return data;
+      return <String, dynamic>{'data': data};
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
   AuthException _map(DioException e) {
     final status = e.response?.statusCode;
     final body = e.response?.data;
@@ -196,6 +225,18 @@ class DioClient {
       case 429:
         return AuthException(
           'Terlalu sering mencoba. Tunggu 1 menit lalu coba lagi.',
+          errors: errors,
+          statusCode: status,
+          data: data,
+        );
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        // Error server (mis. exception backend): body biasanya HTML debug,
+        // bukan JSON — jangan tampilkan pesan jaringan yang menyesatkan.
+        return AuthException(
+          'Server bermasalah (kode $status). Coba lagi nanti.',
           errors: errors,
           statusCode: status,
           data: data,
