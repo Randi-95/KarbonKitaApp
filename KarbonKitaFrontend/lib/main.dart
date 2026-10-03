@@ -9,6 +9,7 @@ import 'bloc/dashboard/dashboard_bloc.dart';
 import 'bloc/leaderboard/leaderboard_bloc.dart';
 import 'bloc/level/level_bloc.dart';
 import 'bloc/mission/mission_bloc.dart';
+import 'bloc/merchant/merchant_bloc.dart';
 import 'bloc/quiz/quiz_bloc.dart';
 import 'bloc/voucher/voucher_bloc.dart';
 import 'core/network/connectivity_service.dart';
@@ -17,11 +18,13 @@ import 'core/storage/cache_service.dart';
 import 'core/storage/token_storage.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/leaderboard_remote_datasource.dart';
+import 'data/datasources/merchant_remote_datasource.dart';
 import 'data/datasources/mission_remote_datasource.dart';
 import 'data/datasources/profile_remote_datasource.dart';
 import 'data/datasources/voucher_remote_datasource.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/leaderboard_repository.dart';
+import 'data/repositories/merchant_repository.dart';
 import 'data/repositories/mission_repository.dart';
 import 'data/repositories/profile_repository.dart';
 import 'data/repositories/voucher_repository.dart';
@@ -71,6 +74,13 @@ Future<void> main() async {
   );
   final levelBloc = LevelBloc(profileRepository);
   final activityBloc = ActivityBloc(profileRepository);
+  final merchantBloc = MerchantBloc(
+    MerchantRepository(
+      MerchantRemoteDatasource(dioClient),
+      cache: cache,
+      storage: storage,
+    ),
+  );
 
   runApp(
     MyApp(
@@ -82,6 +92,7 @@ Future<void> main() async {
       quizBloc: quizBloc,
       levelBloc: levelBloc,
       activityBloc: activityBloc,
+      merchantBloc: merchantBloc,
       connectivity: connectivity,
     ),
   );
@@ -98,6 +109,7 @@ class MyApp extends StatelessWidget {
     required this.quizBloc,
     required this.levelBloc,
     required this.activityBloc,
+    required this.merchantBloc,
     required this.connectivity,
   });
 
@@ -109,6 +121,7 @@ class MyApp extends StatelessWidget {
   final QuizBloc quizBloc;
   final LevelBloc levelBloc;
   final ActivityBloc activityBloc;
+  final MerchantBloc merchantBloc;
   final ConnectivityService connectivity;
 
   @override
@@ -123,6 +136,7 @@ class MyApp extends StatelessWidget {
         BlocProvider.value(value: quizBloc),
         BlocProvider.value(value: levelBloc),
         BlocProvider.value(value: activityBloc),
+        BlocProvider.value(value: merchantBloc),
       ],
       child: MaterialApp(
         title: 'KarbonKita',

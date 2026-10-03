@@ -85,3 +85,4 @@ Run `composer test` / `flutter analyze` before pushing; there is no CI workflow 
 - No `opencode.json`, no `.github/workflows`, no `CLAUDE.md`/`.cursor` rules — this file is the sole agent instruction source at root (plus `KarbonKitaFrontend/AGENTS.md` for frontend).
 - `vite.config.js` uses `@tailwindcss/vite` — requires Node 18+ for `npm run dev/build`.
 - Branch naming: `feature/<name>`, `bugfix/<name>` (from frontend CONTRIBUTING.md).
+- **Deploy (backend):** Docker Compose production stack in `backend/docker-compose.yml` (services `app`/`queue`/`db`/`web`). VPS sekolah uses **CloudPanel** (Nginx host owns 80/443); `web` (nginx container) only binds `127.0.0.1:${WEB_PORT}`, CloudPanel reverse-proxies `mage.pemudasintaks.web.id` → that port. Full guide: `DEPLOY.md`. Files: `backend/Dockerfile`, `backend/docker/entrypoint.sh`, `backend/docker/nginx/default.conf`, `backend/.env.production.example`. Never bind 80/443 in this stack — CloudPanel handles TLS.

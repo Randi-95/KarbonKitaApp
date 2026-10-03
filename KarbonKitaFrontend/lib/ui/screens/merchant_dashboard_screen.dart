@@ -1,6 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
+import '../../bloc/merchant/merchant_bloc.dart';
+import '../../bloc/merchant/merchant_event.dart';
+import '../../bloc/merchant/merchant_state.dart';
+import '../../models/merchant_dashboard.dart';
+import 'riwayat_pencairan_screen.dart';
 import 'scan_voucher_screen.dart';
 
+/// Dashboard merchant terintegrasi API.
+///
+/// - `GET /api/merchant/dashboard` via [MerchantBloc] (cache-first Hive).
+/// - Toggle Buka/Tutup via `PATCH /merchant/status` (optimistic update).
+/// - List transaksi dari `recent_disbursements` apa adanya (generik:
+///   Klaim #id + nominal + status) karena backend belum join nama warga.
 class MerchantDashboardScreen extends StatefulWidget {
   const MerchantDashboardScreen({super.key});
 
@@ -10,74 +25,278 @@ class MerchantDashboardScreen extends StatefulWidget {
 }
 
 class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
-  bool _isStoreOpen = true;
+  @override
+  void initState() {
+    super.initState();
+    // Muat sekali; BLoC tampilkan cache Hive instan lalu refresh online.
+    Future.microtask(() {
+      if (mounted) context.read<MerchantBloc>().add(const MerchantLoaded());
+    });
+  }
 
-  final List<Map<String, dynamic>> _transactions = [
-    {
-      'name': 'Rafiq',
-      'rt': '05',
-      'voucher': 'Voucher Diskon Rp 20.000',
-      'time': 'Hari ini, 10:24 WIB',
-      'amount': 'Rp 20.000',
-      'color': const Color(0xFF42A5F5),
-      'bg': const Color(0xFFE3F2FD),
-    },
-    {
-      'name': 'Siti Aisyah',
-      'rt': '03',
-      'voucher': 'Voucher Diskon Rp 15.000',
-      'time': 'Hari ini, 09:58 WIB',
-      'amount': 'Rp 15.000',
-      'color': const Color(0xFFEC407A),
-      'bg': const Color(0xFFFCE4EC),
-    },
-    {
-      'name': 'Dimas Pratama',
-      'rt': '02',
-      'voucher': 'Voucher Diskon Rp 10.000',
-      'time': 'Hari ini, 09:31 WIB',
-      'amount': 'Rp 10.000',
-      'color': const Color(0xFFFFA726),
-      'bg': const Color(0xFFFFF3E0),
-    },
-    {
-      'name': 'Nadia Putri',
-      'rt': '07',
-      'voucher': 'Voucher Diskon Rp 20.000',
-      'time': 'Kemarin, 17:45 WIB',
-      'amount': 'Rp 20.000',
-      'color': const Color(0xFFAB47BC),
-      'bg': const Color(0xFFF3E5F5),
-    },
-  ];
+  Future<void> _onRefresh() async {
+    context.read<MerchantBloc>().add(const MerchantRefreshed());
+    // Tunggu hingga bukan loading agar RefreshIndicator berhenti wajar.
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FA),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTopHeader(),
-              const SizedBox(height: 16),
-              _buildRiwayatCard(),
-              const SizedBox(height: 16),
-              _buildDarkTotalCard(),
-              const SizedBox(height: 16),
-              _buildScanCta(),
-              const SizedBox(height: 20),
-              _buildTransaksiSection(),
+        child: BlocConsumer<MerchantBloc, MerchantState>(
+          listenWhen: (prev, curr) =>
+              prev.toggleError != curr.toggleError && curr.toggleError != null,
+          listener: (context, state) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.toggleError!)));
+          },
+          builder: (context, state) {
+            if (state.isUnauthorized) {
+              return _buildUnauthorized();
+            }
+            switch (state.status) {
+              case MerchantStatus.initial:
+              case MerchantStatus.loading:
+                if (state.dashboard != null) {
+                  return _buildBody(context, state, refreshing: true);
+                }
+                return const Center(child: CircularProgressIndicator());
+              case MerchantStatus.error:
+                return _buildError(
+                  context,
+                  state.errorMessage ?? 'Gagal memuat dashboard.',
+                );
+              case MerchantStatus.loaded:
+                return _buildBody(context, state);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnauthorized() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            const Text(
+              'Sesi berakhir. Silakan login ulang.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => context.read<AuthBloc>().add(const LoggedOut()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B8039),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Kembali ke Login'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError(BuildContext context, String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () =>
+                  context.read<MerchantBloc>().add(const MerchantRefreshed()),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Coba Lagi'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B8039),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    MerchantState state, {
+    bool refreshing = false,
+  }) {
+    final dashboard = state.dashboard!;
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: const Color(0xFF1B8039),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildTopHeader(context, dashboard, state.isToggling),
+            if (!dashboard.canRedeem) ...[
+              const SizedBox(height: 12),
+              _buildVerifyWarning(dashboard),
             ],
+            if (state.isOffline) ...[
+              const SizedBox(height: 12),
+              _buildOfflineBanner(state),
+            ],
+            const SizedBox(height: 16),
+            _buildRiwayatCard(context),
+            const SizedBox(height: 16),
+            _buildDarkTotalCard(dashboard),
+            const SizedBox(height: 16),
+            _buildScanCta(context, enabled: dashboard.canRedeem),
+            const SizedBox(height: 20),
+            _buildTransaksiSection(dashboard),
+            const SizedBox(height: 20),
+            _buildLogoutButton(context),
+            if (refreshing) ...[
+              const SizedBox(height: 12),
+              const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => _confirmLogout(context),
+        icon: const Icon(Icons.logout, size: 18),
+        label: const Text(
+          'Keluar',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFFC62828),
+          side: const BorderSide(color: Color(0xFFC62828)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTopHeader() {
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keluar dari akun?'),
+        content: const Text(
+          'Sesi dan data offline Anda akan dihapus. Anda perlu login kembali.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Keluar',
+              style: TextStyle(
+                color: Color(0xFFC62828),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      // SessionGate otomatis berpindah ke LoginScreen saat state
+      // unauthenticated — tidak perlu Navigator manual.
+      context.read<AuthBloc>().add(const LoggedOut());
+    }
+  }
+
+  Widget _buildVerifyWarning(MerchantDashboard dashboard) {
+    final text = dashboard.isVerified
+        ? 'Toko sedang tutup — redeem voucher dinonaktifkan sampai dibuka kembali.'
+        : 'Akun toko ${dashboard.verificationStatus} — redeem voucher aktif setelah admin memverifikasi.';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFFB300).withValues(alpha: 0.4),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_outlined, color: Color(0xFFF57F17)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineBanner(MerchantState state) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.wifi_off, size: 14, color: Colors.grey.shade600),
+          const SizedBox(width: 6),
+          Text(
+            'Mode offline — data terakhir ditampilkan',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopHeader(
+    BuildContext context,
+    MerchantDashboard dashboard,
+    bool isToggling,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -93,10 +312,12 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Bakery & Cafe Nusantara',
-                      style: TextStyle(
+                      dashboard.storeName.isEmpty
+                          ? 'Toko Saya'
+                          : dashboard.storeName,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                         color: Colors.black87,
@@ -108,12 +329,16 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                   Container(
                     width: 18,
                     height: 18,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF43A047),
+                    decoration: BoxDecoration(
+                      color: dashboard.isVerified
+                          ? const Color(0xFF43A047)
+                          : Colors.grey,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.check,
+                    child: Icon(
+                      dashboard.isVerified
+                          ? Icons.check
+                          : Icons.hourglass_empty,
                       color: Colors.white,
                       size: 12,
                     ),
@@ -127,23 +352,37 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
+                  color: dashboard.isVerified
+                      ? const Color(0xFFE8F5E9)
+                      : const Color(0xFFFFF3E0),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: const Color(0xFF1B8039).withValues(alpha: 0.15),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.verified, color: Color(0xFF1B8039), size: 14),
-                    SizedBox(width: 6),
+                    Icon(
+                      dashboard.isVerified
+                          ? Icons.verified
+                          : Icons.pending_outlined,
+                      color: dashboard.isVerified
+                          ? const Color(0xFF1B8039)
+                          : const Color(0xFFE65100),
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
                     Text(
-                      'Mitra UMKM Terverifikasi',
+                      dashboard.isVerified
+                          ? 'Mitra UMKM Terverifikasi'
+                          : 'Status: ${dashboard.verificationStatus}',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1B8039),
+                        color: dashboard.isVerified
+                            ? const Color(0xFF1B8039)
+                            : const Color(0xFFE65100),
                       ),
                     ),
                   ],
@@ -153,12 +392,16 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
           ),
         ),
         const SizedBox(width: 12),
-        _buildStatusTokoCard(),
+        _buildStatusTokoCard(context, dashboard, isToggling),
       ],
     );
   }
 
-  Widget _buildStatusTokoCard() {
+  Widget _buildStatusTokoCard(
+    BuildContext context,
+    MerchantDashboard dashboard,
+    bool isToggling,
+  ) {
     return Container(
       width: 122,
       padding: const EdgeInsets.all(12),
@@ -185,15 +428,23 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Switch(
-            value: _isStoreOpen,
-            onChanged: (v) => setState(() => _isStoreOpen = v),
-            activeThumbColor: Colors.white,
-            activeTrackColor: const Color(0xFF43A047),
-            inactiveThumbColor: Colors.white,
-            inactiveTrackColor: Colors.grey.shade300,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
+          if (isToggling)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Switch(
+              value: dashboard.isOpen,
+              onChanged: (v) =>
+                  context.read<MerchantBloc>().add(MerchantStatusToggled(v)),
+              activeThumbColor: Colors.white,
+              activeTrackColor: const Color(0xFF43A047),
+              inactiveThumbColor: Colors.white,
+              inactiveTrackColor: Colors.grey.shade300,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -202,17 +453,19 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: _isStoreOpen ? const Color(0xFF43A047) : Colors.grey,
+                  color: dashboard.isOpen
+                      ? const Color(0xFF43A047)
+                      : Colors.grey,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 6),
               Text(
-                _isStoreOpen ? 'Toko Buka' : 'Toko Tutup',
+                dashboard.isOpen ? 'Toko Buka' : 'Toko Tutup',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: _isStoreOpen
+                  color: dashboard.isOpen
                       ? const Color(0xFF1B8039)
                       : Colors.grey.shade600,
                 ),
@@ -224,64 +477,78 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     );
   }
 
-  Widget _buildRiwayatCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
+  Widget _buildRiwayatCard(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      elevation: 0,
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const RiwayatPencairanScreen()),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE8F5E9),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.description_outlined,
-              color: Color(0xFF1B8039),
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Riwayat Pencairan Dana',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'Lihat semua riwayat pencairan dana ke rekening usaha Anda',
-                  style: TextStyle(fontSize: 11, color: Colors.black54),
-                  maxLines: 2,
+                child: const Icon(
+                  Icons.description_outlined,
+                  color: Color(0xFF1B8039),
+                  size: 22,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Riwayat Pencairan Dana',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Lihat semua riwayat pencairan dana ke rekening usaha Anda',
+                      style: TextStyle(fontSize: 11, color: Colors.black54),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.black38, size: 22),
+            ],
           ),
-          const Icon(Icons.chevron_right, color: Colors.black38, size: 22),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildDarkTotalCard() {
+  Widget _buildDarkTotalCard(MerchantDashboard dashboard) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -343,45 +610,14 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text(
-                'Rp 1.450.000',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.18),
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.trending_up, color: Color(0xFF66BB6A), size: 12),
-                    SizedBox(width: 4),
-                    Text(
-                      '12.4%',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Text(
+            _formatRp(dashboard.balance),
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              height: 1,
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
@@ -394,9 +630,9 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               Expanded(
                 child: _buildGlassStat(
                   icon: Icons.receipt_long,
-                  label: 'Transaksi Hari Ini',
-                  value: '12 Voucher',
-                  sub: '+3 dari kemarin',
+                  label: 'Voucher Dicairkan',
+                  value: '${dashboard.stats.totalRedeemed} Voucher',
+                  sub: '${dashboard.stats.activeVouchers} voucher aktif',
                   subIcon: Icons.trending_up,
                 ),
               ),
@@ -404,10 +640,9 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               Expanded(
                 child: _buildGlassStat(
                   icon: Icons.account_balance,
-                  label: 'Status Kas',
-                  value: 'Cair Otomatis',
-                  sub: 'ke BCA',
-                  subExtra: 'Rekening ****5678',
+                  label: 'Total Dicairkan',
+                  value: _formatRp(dashboard.stats.totalDisbursed),
+                  sub: '${dashboard.stats.totalVouchers} katalog voucher',
                   isBank: true,
                 ),
               ),
@@ -424,7 +659,6 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     required String value,
     String? sub,
     IconData? subIcon,
-    String? subExtra,
     bool isBank = false,
   }) {
     return Container(
@@ -472,61 +706,48 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               fontWeight: FontWeight.w800,
               color: Colors.white,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          if (isBank) ...[
-            const SizedBox(height: 2),
-            Text(
-              sub ?? '',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            if (subExtra != null)
-              Text(
-                subExtra,
-                style: const TextStyle(fontSize: 10, color: Colors.white54),
-              ),
-          ] else ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                if (subIcon != null)
-                  const Icon(
-                    Icons.trending_up,
-                    color: Color(0xFF66BB6A),
-                    size: 10,
-                  ),
-                if (subIcon != null) const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    sub ?? '',
-                    style: const TextStyle(fontSize: 10, color: Colors.white54),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              if (subIcon != null && !isBank)
+                const Icon(
+                  Icons.trending_up,
+                  color: Color(0xFF66BB6A),
+                  size: 10,
                 ),
-              ],
-            ),
-          ],
+              if (subIcon != null && !isBank) const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  sub ?? '',
+                  style: const TextStyle(fontSize: 10, color: Colors.white54),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildScanCta() {
+  Widget _buildScanCta(BuildContext context, {required bool enabled}) {
     return Material(
-      color: const Color(0xFF1B8039),
+      color: enabled ? const Color(0xFF1B8039) : Colors.grey.shade400,
       borderRadius: BorderRadius.circular(16),
       elevation: 0,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ScanVoucherScreen()),
-          );
-        },
+        onTap: enabled
+            ? () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ScanVoucherScreen()),
+                );
+              }
+            : null,
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
@@ -552,11 +773,11 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Scan Voucher Warga',
                       style: TextStyle(
                         fontSize: 14,
@@ -564,10 +785,15 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                         color: Colors.white,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Pindai QR atau input manual token voucher',
-                      style: TextStyle(fontSize: 11, color: Colors.white70),
+                      enabled
+                          ? 'Pindai QR atau input manual token voucher'
+                          : 'Aktif setelah toko terverifikasi & buka',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.white70,
+                      ),
                     ),
                   ],
                 ),
@@ -592,7 +818,8 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     );
   }
 
-  Widget _buildTransaksiSection() {
+  Widget _buildTransaksiSection(MerchantDashboard dashboard) {
+    final items = dashboard.recent;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -607,22 +834,12 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               ),
             ),
             const Spacer(),
-            GestureDetector(
-              onTap: () {},
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Lihat Semua',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF1B8039),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  SizedBox(width: 2),
-                  Icon(Icons.chevron_right, color: Color(0xFF1B8039), size: 16),
-                ],
+            Text(
+              '${items.length} pencairan',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF1B8039),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -640,31 +857,43 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               ),
             ],
           ),
-          child: Column(
-            children: List.generate(_transactions.length, (index) {
-              final t = _transactions[index];
-              final isLast = index == _transactions.length - 1;
-              return Column(
-                children: [
-                  _buildTransactionRow(t),
-                  if (!isLast)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: Colors.grey.shade100,
-                      indent: 16,
-                      endIndent: 16,
+          child: items.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(
+                    child: Text(
+                      'Belum ada pencairan.\nScan voucher pertama untuk mulai.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
-                ],
-              );
-            }),
-          ),
+                  ),
+                )
+              : Column(
+                  children: List.generate(items.length, (index) {
+                    final t = items[index];
+                    final isLast = index == items.length - 1;
+                    return Column(
+                      children: [
+                        _buildTransactionRow(t),
+                        if (!isLast)
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: Colors.grey.shade100,
+                            indent: 16,
+                            endIndent: 16,
+                          ),
+                      ],
+                    );
+                  }),
+                ),
         ),
       ],
     );
   }
 
-  Widget _buildTransactionRow(Map<String, dynamic> t) {
+  Widget _buildTransactionRow(MerchantDisbursement t) {
+    final completed = t.isCompleted;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       child: Row(
@@ -674,23 +903,36 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: t['bg'] as Color,
-                child: Icon(Icons.person, color: t['color'] as Color, size: 24),
-              ),
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF43A047),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  child: const Icon(Icons.check, color: Colors.white, size: 10),
+                backgroundColor: completed
+                    ? const Color(0xFFE8F5E9)
+                    : const Color(0xFFFFF3E0),
+                child: Icon(
+                  Icons.receipt_long,
+                  color: completed
+                      ? const Color(0xFF43A047)
+                      : const Color(0xFFF57F17),
+                  size: 24,
                 ),
               ),
+              if (completed)
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF43A047),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 10,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(width: 12),
@@ -699,7 +941,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${t['name']} (RT ${t['rt']})',
+                  'Klaim #${t.voucherClaimId}',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -710,7 +952,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  t['voucher'] as String,
+                  t.referenceId.isEmpty ? 'Ref: -' : t.referenceId,
                   style: const TextStyle(fontSize: 11, color: Colors.black54),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -726,7 +968,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        t['time'] as String,
+                        t.processedAt.isEmpty ? '-' : t.processedAt,
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.grey.shade500,
@@ -745,7 +987,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                t['amount'] as String,
+                _formatRp(t.amount),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
@@ -756,18 +998,22 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
+                  color: completed
+                      ? const Color(0xFFE8F5E9)
+                      : const Color(0xFFFFF3E0),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: const Color(0xFF1B8039).withValues(alpha: 0.2),
                   ),
                 ),
-                child: const Text(
-                  'Berhasil Dicairkan',
+                child: Text(
+                  completed ? 'Berhasil Dicairkan' : t.status,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1B8039),
+                    color: completed
+                        ? const Color(0xFF1B8039)
+                        : const Color(0xFFE65100),
                   ),
                 ),
               ),
@@ -776,5 +1022,17 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
         ],
       ),
     );
+  }
+
+  /// Format rupiah Indonesia: 1450000 -> "Rp 1.450.000".
+  String _formatRp(double value) {
+    final intPart = value.truncate().toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < intPart.length; i++) {
+      final rev = intPart.length - i;
+      buffer.write(intPart[i]);
+      if (rev > 1 && rev % 3 == 1) buffer.write('.');
+    }
+    return 'Rp ${buffer.toString()}';
   }
 }

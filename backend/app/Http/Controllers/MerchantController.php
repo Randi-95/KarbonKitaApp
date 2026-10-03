@@ -10,6 +10,7 @@ use App\Models\Voucher;
 use App\Models\VoucherClaim;
 use App\Services\XenditService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -89,6 +90,80 @@ class MerchantController extends Controller
                     'failure_code' => $d->failure_code,
                     'processed_at' => $d->created_at?->format('Y-m-d\TH:i:s'),
                 ])->values(),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /api/merchant/disbursements — riwayat pencairan dana toko sendiri.
+     * Paginated + filter `?status=completed|pending|failed|...`.
+     * Eager load claim→user/voucher agar halaman riwayat bisa menampilkan
+     * nama warga & judul voucher tanpa N+1.
+     */
+    public function disbursements(Request $request): JsonResponse
+    {
+        $user = Auth::user()->load('mitraProfile');
+        $mitra = $user->mitraProfile;
+
+        if (! $mitra) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Merchant profile not found.',
+            ], 403);
+        }
+
+        $status = (string) $request->query('status', 'all');
+        $allowed = ['all', 'completed', 'pending', 'failed', 'reversed', 'rejected', 'cancelled', 'expired'];
+
+        if (! in_array($status, $allowed, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => ['status' => ['Status riwayat tidak dikenali.']],
+            ], 422);
+        }
+
+        $query = Disbursement::with([
+            'voucherClaim:id,user_id,voucher_id,qr_token,status,used_at',
+            'voucherClaim.user:id,name,rt,rw',
+            'voucherClaim.voucher:id,title,rupiah_value',
+        ])->where('mitra_profile_id', $mitra->id);
+
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        $paginated = $query->orderByDesc('id')->paginate(15);
+
+        $items = collect($paginated->items())->map(fn ($d) => [
+            'id' => $d->id,
+            'voucher_claim_id' => $d->voucher_claim_id,
+            'amount' => number_format((float) $d->amount, 2, '.', ''),
+            'status' => $d->status,
+            'raw_status' => $d->raw_status,
+            'payout_id' => $d->payout_id ?? $d->xendit_disbursement_id,
+            'reference_id' => $d->reference_id,
+            'bank_name' => $d->bank_name,
+            'bank_account_number' => $d->bank_account_number,
+            'bank_account_name' => $d->bank_account_name,
+            'failure_code' => $d->failure_code,
+            'failure_reason' => $d->failure_reason,
+            'processed_at' => $d->created_at?->format('Y-m-d\TH:i:s'),
+            'warga_name' => $d->voucherClaim?->user?->name,
+            'warga_rt' => $d->voucherClaim?->user?->rt,
+            'warga_rw' => $d->voucherClaim?->user?->rw,
+            'voucher_title' => $d->voucherClaim?->voucher?->title,
+        ])->values();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Disbursements retrieved successfully.',
+            'data' => $items,
+            'meta' => [
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
             ],
         ]);
     }

@@ -1,5 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../bloc/merchant/merchant_bloc.dart';
+import '../../bloc/merchant/merchant_event.dart';
+import '../../bloc/merchant/merchant_state.dart';
+import '../../models/merchant_dashboard.dart';
+
+/// Scanner voucher merchant: kamera QR asli + input manual token.
+///
+/// - Hasil scan QR / input manual dikirim sebagai `unique_code` ke
+///   `POST /api/vouchers/redeem` via [MerchantBloc].
+/// - Format token asli backend `KBK-XXX-XXX` — tidak ada validasi regex
+///   di client, biarkan backend memvalidasi `exists:qr_token`.
 class ScanVoucherScreen extends StatefulWidget {
   const ScanVoucherScreen({super.key});
 
@@ -8,44 +21,84 @@ class ScanVoucherScreen extends StatefulWidget {
 }
 
 class _ScanVoucherScreenState extends State<ScanVoucherScreen> {
-  bool _isTorchOn = false;
+  late final MobileScannerController _scannerController;
   final TextEditingController _tokenController = TextEditingController();
+  bool _isTorchOn = false;
+  bool _sheetOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scannerController = MobileScannerController(
+      formats: const [BarcodeFormat.qrCode],
+    );
+  }
 
   @override
   void dispose() {
     _tokenController.dispose();
+    _scannerController.dispose();
     super.dispose();
+  }
+
+  void _onBarcodeDetect(BarcodeCapture capture) {
+    final state = context.read<MerchantBloc>().state;
+    if (_sheetOpen || state.redeemStatus == MerchantRedeemStatus.redeeming) {
+      return;
+    }
+    if (capture.barcodes.isEmpty) return;
+    final raw = capture.barcodes.first.rawValue?.trim() ?? '';
+    if (raw.isEmpty) return;
+    _tokenController.text = raw;
+    _submit(raw);
   }
 
   void _handleVerifikasi() {
     final text = _tokenController.text.trim();
-    final valid = RegExp(r'^\d{4}-\d{4}$').hasMatch(text);
     if (text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Masukkan nomor token voucher')),
       );
       return;
     }
-    if (!valid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Format token harus 8829-1029')),
-      );
-      return;
-    }
-    _showSuccessSheet();
+    _submit(text);
   }
 
-  void _showSuccessSheet() {
+  void _submit(String code) {
+    context.read<MerchantBloc>().add(MerchantRedeemSubmitted(code));
+  }
+
+  String _cameraErrorMessage(MobileScannerException error) {
+    switch (error.errorCode) {
+      case MobileScannerErrorCode.permissionDenied:
+        return 'Akses kamera ditolak. Aktifkan izin kamera untuk aplikasi ini di pengaturan, lalu coba lagi.';
+      case MobileScannerErrorCode.unsupported:
+        return 'Perangkat ini tidak mendukung pemindaian QR. Gunakan input manual di bawah.';
+      default:
+        return 'Kamera gagal dinyalakan. Gunakan input manual token di bawah.';
+    }
+  }
+
+  void _showSuccessSheet(RedeemResult result) {
+    _sheetOpen = true;
+    _scannerController.stop();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _SuccessSheet(
+      builder: (_) => _SuccessSheet(
+        result: result,
         onDone: () {
           Navigator.pop(context);
         },
       ),
-    );
+    ).whenComplete(() {
+      if (!mounted) return;
+      _sheetOpen = false;
+      context.read<MerchantBloc>().add(const MerchantRedeemReset());
+      _tokenController.clear();
+      _scannerController.start();
+    });
   }
 
   @override
@@ -53,39 +106,61 @@ class _ScanVoucherScreenState extends State<ScanVoucherScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1A14),
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Scanner Voucher',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+        child: BlocListener<MerchantBloc, MerchantState>(
+          listenWhen: (prev, curr) => prev.redeemStatus != curr.redeemStatus,
+          listener: (context, state) {
+            if (state.redeemStatus == MerchantRedeemStatus.success &&
+                state.lastRedeem != null) {
+              _showSuccessSheet(state.lastRedeem!);
+            } else if (state.redeemStatus == MerchantRedeemStatus.failure) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    state.redeemErrorMessage ?? 'Gagal verifikasi voucher.',
+                  ),
+                  backgroundColor: const Color(0xFFB71C1C),
+                ),
+              );
+            } else if (state.isUnauthorized) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Sesi berakhir. Silakan login ulang.'),
+                ),
+              );
+            }
+          },
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Scanner Voucher',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Arahkan kamera ke QR voucher pelanggan',
-                      style: TextStyle(fontSize: 13, color: Colors.white60),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildViewport(),
-                    const SizedBox(height: 20),
-                    _buildManualInput(),
-                    const SizedBox(height: 8),
-                    // Hidden success preview note (for dev): tap Verifikasi to show
-                  ],
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Arahkan kamera ke QR voucher pelanggan',
+                        style: TextStyle(fontSize: 13, color: Colors.white60),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildViewport(),
+                      const SizedBox(height: 20),
+                      _buildManualInput(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -114,7 +189,10 @@ class _ScanVoucherScreenState extends State<ScanVoucherScreen> {
           const Spacer(),
           InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => setState(() => _isTorchOn = !_isTorchOn),
+            onTap: () async {
+              await _scannerController.toggleTorch();
+              if (mounted) setState(() => _isTorchOn = !_isTorchOn);
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -148,162 +226,224 @@ class _ScanVoucherScreenState extends State<ScanVoucherScreen> {
   }
 
   Widget _buildViewport() {
-    return GestureDetector(
-      onTap: () {
-        // UI only: tap viewport also triggers success for demo
-        // Uncomment to enable dummy scan tap
-        // _showSuccessSheet();
-      },
-      child: Container(
-        height: 320,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            children: [
-              // dark bg
-              Container(color: Colors.black),
-              // green corners
-              Positioned(
-                top: 16,
-                left: 16,
-                child: _Corner(
-                  borderColors: const [Color(0xFF00E676), Color(0xFF00E676)],
-                  top: true,
-                  left: true,
-                ),
-              ),
-              Positioned(
-                top: 16,
-                right: 16,
-                child: _Corner(top: true, left: false),
-              ),
-              Positioned(
-                bottom: 16,
-                left: 16,
-                child: _Corner(top: false, left: true),
-              ),
-              Positioned(
-                bottom: 16,
-                right: 16,
-                child: _Corner(top: false, left: false),
-              ),
-              // center instruction
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.crop_free,
-                        color: Colors.white38,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Posisikan QR di dalam area',
-                      style: TextStyle(fontSize: 12, color: Colors.white54),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return BlocBuilder<MerchantBloc, MerchantState>(
+      buildWhen: (prev, curr) => prev.redeemStatus != curr.redeemStatus,
+      builder: (context, state) {
+        final redeeming = state.redeemStatus == MerchantRedeemStatus.redeeming;
+        return Container(
+          height: 320,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
-        ),
-      ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              children: [
+                MobileScanner(
+                  controller: _scannerController,
+                  onDetect: _onBarcodeDetect,
+                  errorBuilder: (context, error, child) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.no_photography_outlined,
+                              color: Colors.white54,
+                              size: 36,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _cameraErrorMessage(error),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: () async {
+                                try {
+                                  await _scannerController.start();
+                                } catch (_) {}
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white38),
+                              ),
+                              child: const Text('Coba Nyalakan Kamera'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const Positioned(
+                  top: 16,
+                  left: 16,
+                  child: _Corner(top: true, left: true),
+                ),
+                const Positioned(
+                  top: 16,
+                  right: 16,
+                  child: _Corner(top: true, left: false),
+                ),
+                const Positioned(
+                  bottom: 16,
+                  left: 16,
+                  child: _Corner(top: false, left: true),
+                ),
+                const Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: _Corner(top: false, left: false),
+                ),
+                if (redeeming)
+                  Container(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Color(0xFF00E676)),
+                          SizedBox(height: 12),
+                          Text(
+                            'Memverifikasi voucher…',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  const Positioned(
+                    bottom: 24,
+                    left: 0,
+                    right: 0,
+                    child: Text(
+                      'Posisikan QR di dalam area',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.white70),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildManualInput() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E3329),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Input Manual Nomor Token Voucher',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.white70,
-              fontWeight: FontWeight.w600,
-            ),
+    return BlocBuilder<MerchantBloc, MerchantState>(
+      buildWhen: (prev, curr) => prev.redeemStatus != curr.redeemStatus,
+      builder: (context, state) {
+        final redeeming = state.redeemStatus == MerchantRedeemStatus.redeeming;
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E3329),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
           ),
-          const SizedBox(height: 12),
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A3F35),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: TextField(
-                    controller: _tokenController,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Contoh: 8829-1029',
-                      hintStyle: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 13,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
-                      ),
-                    ),
-                    keyboardType: TextInputType.text,
-                  ),
+              const Text(
+                'Input Manual Nomor Token Voucher',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: 10),
-              ElevatedButton(
-                onPressed: _handleVerifikasi,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E9E4B),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A3F35),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: TextField(
+                        controller: _tokenController,
+                        enabled: !redeeming,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Contoh: KBK-ABC-DEF',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.35),
+                            fontSize: 13,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                        ),
+                        keyboardType: TextInputType.text,
+                        textCapitalization: TextCapitalization.characters,
+                        onSubmitted: (_) => _handleVerifikasi(),
+                      ),
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: redeeming ? null : _handleVerifikasi,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E9E4B),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: redeeming
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Verifikasi',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Verifikasi',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -311,8 +451,7 @@ class _ScanVoucherScreenState extends State<ScanVoucherScreen> {
 class _Corner extends StatelessWidget {
   final bool top;
   final bool left;
-  final List<Color>? borderColors;
-  const _Corner({required this.top, required this.left, this.borderColors});
+  const _Corner({required this.top, required this.left});
 
   @override
   Widget build(BuildContext context) {
@@ -322,7 +461,6 @@ class _Corner extends StatelessWidget {
       height: 42,
       child: Stack(
         children: [
-          // horizontal
           Positioned(
             top: top ? 0 : null,
             bottom: top ? null : 0,
@@ -336,7 +474,6 @@ class _Corner extends StatelessWidget {
               ),
             ),
           ),
-          // vertical
           Positioned(
             left: left ? 0 : null,
             right: left ? null : 0,
@@ -350,21 +487,6 @@ class _Corner extends StatelessWidget {
               ),
             ),
           ),
-          // corner cut inner to make L shape
-          Positioned.fill(
-            child: Container(
-              margin: EdgeInsets.only(
-                left: left ? 6 : 0,
-                right: left ? 0 : 6,
-                top: top ? 6 : 0,
-                bottom: top ? 0 : 6,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                border: Border.all(color: Colors.transparent),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -372,11 +494,13 @@ class _Corner extends StatelessWidget {
 }
 
 class _SuccessSheet extends StatelessWidget {
+  final RedeemResult result;
   final VoidCallback onDone;
-  const _SuccessSheet({required this.onDone});
+  const _SuccessSheet({required this.result, required this.onDone});
 
   @override
   Widget build(BuildContext context) {
+    final success = result.isCompleted;
     return Container(
       margin: EdgeInsets.only(
         top: 80,
@@ -400,73 +524,25 @@ class _SuccessSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1B8039),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check, color: Colors.white, size: 34),
-                ),
-                Positioned(
-                  top: -6,
-                  left: 8,
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: Colors.amber,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: Colors.amber,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 10,
-                  left: -6,
-                  child: Container(
-                    width: 5,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF43A047),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 8,
-                  right: -8,
-                  child: Container(
-                    width: 5,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.amber,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-              ],
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: success
+                    ? const Color(0xFF1B8039)
+                    : const Color(0xFFF57F17),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                success ? Icons.check : Icons.hourglass_empty,
+                color: Colors.white,
+                size: 34,
+              ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Voucher Berhasil Diverifikasi!',
-              style: TextStyle(
+            Text(
+              success ? 'Voucher Berhasil Diverifikasi!' : 'Payout Diproses!',
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Colors.black87,
@@ -474,30 +550,23 @@ class _SuccessSheet extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Transaksi berhasil dan dana telah dicairkan.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+            Text(
+              success
+                  ? 'Transaksi berhasil dan dana telah dicairkan.'
+                  : 'Payout diterima Xendit, menunggu status final via webhook.',
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 18),
-            _InfoCard(
-              icon: Icons.person,
-              iconBg: const Color(0xFFE3F2FD),
-              iconColor: const Color(0xFF42A5F5),
-              label: 'Informasi Warga',
-              title: 'Warga: Rafiq (RT 05)',
-              subtitle: 'Kelurahan Sukamaju, Kecamatan Cimahi Tengah',
-              hasLocationIcon: true,
-            ),
-            const SizedBox(height: 10),
             _InfoCard(
               icon: Icons.local_offer,
               iconBg: const Color(0xFFE8F5E9),
               iconColor: const Color(0xFF43A047),
               label: 'Detail Voucher',
-              title: 'Voucher Diskon Rp 20.000 - Valid',
-              subtitle: 'Kedai Kopi Nusantara',
-              hasStoreIcon: true,
+              title: result.voucherTitle.isEmpty
+                  ? result.qrToken
+                  : '${result.voucherTitle} — ${_formatRp(result.amount)}',
+              subtitle: 'Token: ${result.qrToken}',
             ),
             const SizedBox(height: 10),
             Container(
@@ -520,36 +589,22 @@ class _SuccessSheet extends StatelessWidget {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '∞',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1B8039),
-                          ),
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          'xendit',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            fontStyle: FontStyle.italic,
-                            color: Color(0xFF1B8039),
-                          ),
-                        ),
-                      ],
+                    child: const Text(
+                      'xendit',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFF1B8039),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Status Pencairan Dana via Xendit',
                           style: TextStyle(
                             fontSize: 10,
@@ -557,19 +612,24 @@ class _SuccessSheet extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Pencairan Dana Rp 20.000 via Xendit SUKSES!',
-                          style: TextStyle(
+                          success
+                              ? 'Pencairan Dana ${_formatRp(result.amount)} via Xendit SUKSES!'
+                              : 'Payout ${result.disbursementStatus} — Ref ${result.referenceId}',
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFF1B8039),
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Dana telah dikirim ke rekening usaha Anda.',
-                          style: TextStyle(fontSize: 11, color: Colors.black54),
+                          'Ref: ${result.referenceId}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
                         ),
                       ],
                     ),
@@ -578,12 +638,14 @@ class _SuccessSheet extends StatelessWidget {
                   Container(
                     width: 24,
                     height: 24,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF43A047),
+                    decoration: BoxDecoration(
+                      color: success
+                          ? const Color(0xFF43A047)
+                          : const Color(0xFFF57F17),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.check,
+                    child: Icon(
+                      success ? Icons.check : Icons.hourglass_empty,
                       color: Colors.white,
                       size: 14,
                     ),
@@ -633,6 +695,17 @@ class _SuccessSheet extends StatelessWidget {
       ),
     );
   }
+
+  static String _formatRp(double value) {
+    final intPart = value.truncate().toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < intPart.length; i++) {
+      final rev = intPart.length - i;
+      buffer.write(intPart[i]);
+      if (rev > 1 && rev % 3 == 1) buffer.write('.');
+    }
+    return 'Rp ${buffer.toString()}';
+  }
 }
 
 class _InfoCard extends StatelessWidget {
@@ -642,8 +715,6 @@ class _InfoCard extends StatelessWidget {
   final String label;
   final String title;
   final String subtitle;
-  final bool hasLocationIcon;
-  final bool hasStoreIcon;
   const _InfoCard({
     required this.icon,
     required this.iconBg,
@@ -651,8 +722,6 @@ class _InfoCard extends StatelessWidget {
     required this.label,
     required this.title,
     required this.subtitle,
-    this.hasLocationIcon = false,
-    this.hasStoreIcon = false,
   });
 
   @override
@@ -696,38 +765,15 @@ class _InfoCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: Colors.black87,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Row(
-                  children: [
-                    if (hasLocationIcon)
-                      Icon(
-                        Icons.location_on_outlined,
-                        size: 11,
-                        color: Colors.grey.shade500,
-                      ),
-                    if (hasStoreIcon)
-                      Icon(
-                        Icons.storefront_outlined,
-                        size: 11,
-                        color: Colors.grey.shade500,
-                      ),
-                    if (hasLocationIcon || hasStoreIcon)
-                      const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

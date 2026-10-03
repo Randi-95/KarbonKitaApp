@@ -47,6 +47,15 @@ class ApiEndpoints {
   // Leaderboard (scope: rt|rw, timeframe: weekly|monthly)
   static const String leaderboard = '/leaderboard';
 
+  // Merchant (Mitra UMKM) — role:mitra
+  static const String merchantDashboard = '/merchant/dashboard';
+  static const String merchantStatus = '/merchant/status';
+  static const String merchantDisbursements = '/merchant/disbursements';
+
+  // Redeem voucher oleh kasir (QR scan / input manual token).
+  // Body: {unique_code: qr_token}. Token asli backend format KBK-XXX-XXX.
+  static const String vouchersRedeem = '/vouchers/redeem';
+
   static String leaderboardQuery({
     required String scope,
     required String timeframe,
