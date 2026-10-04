@@ -74,6 +74,11 @@ Wajib diisi:
 * `DB_PASSWORD` & `MYSQL_ROOT_PASSWORD` (kuat, berbeda)
 * `XENDIT_API_KEY` + `XENDIT_CALLBACK_TOKEN` (mode **live**)
 
+> Namespace key payout (`PROD-KBK-CLAIM-...`) **otomatis** dari
+> `APP_ENV=production` — tidak perlu setting tambahan. Isi
+> `XENDIT_KEY_PREFIX` manual hanya bila dua VPS production berbagi satu
+> API key Xendit.
+
 Generate `APP_KEY` (di VPS, tanpa PHP host):
 ```bash
 docker run --rm -v "$PWD:/app" -w /app php:8.4-cli-alpine \

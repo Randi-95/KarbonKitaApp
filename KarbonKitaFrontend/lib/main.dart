@@ -7,6 +7,8 @@ import 'bloc/auth/auth_state.dart';
 import 'bloc/activity/activity_bloc.dart';
 import 'bloc/admin_merchant/admin_merchant_bloc.dart';
 import 'bloc/dashboard/dashboard_bloc.dart';
+import 'bloc/donation/donation_bloc.dart';
+import 'bloc/admin_campaign/admin_campaign_bloc.dart';
 import 'bloc/leaderboard/leaderboard_bloc.dart';
 import 'bloc/level/level_bloc.dart';
 import 'bloc/mission/mission_bloc.dart';
@@ -19,6 +21,7 @@ import 'core/storage/cache_service.dart';
 import 'core/storage/token_storage.dart';
 import 'data/datasources/admin_merchant_remote_datasource.dart';
 import 'data/datasources/auth_remote_datasource.dart';
+import 'data/datasources/donation_remote_datasource.dart';
 import 'data/datasources/leaderboard_remote_datasource.dart';
 import 'data/datasources/merchant_remote_datasource.dart';
 import 'data/datasources/mission_remote_datasource.dart';
@@ -26,6 +29,7 @@ import 'data/datasources/profile_remote_datasource.dart';
 import 'data/datasources/voucher_remote_datasource.dart';
 import 'data/repositories/admin_merchant_repository.dart';
 import 'data/repositories/auth_repository.dart';
+import 'data/repositories/donation_repository.dart';
 import 'data/repositories/leaderboard_repository.dart';
 import 'data/repositories/merchant_repository.dart';
 import 'data/repositories/mission_repository.dart';
@@ -87,6 +91,11 @@ Future<void> main() async {
   final adminMerchantBloc = AdminMerchantBloc(
     AdminMerchantRepository(AdminMerchantRemoteDatasource(dioClient)),
   );
+  final donationRepository = DonationRepository(
+    DonationRemoteDatasource(dioClient),
+  );
+  final donationBloc = DonationBloc(donationRepository);
+  final adminCampaignBloc = AdminCampaignBloc(donationRepository);
 
   runApp(
     MyApp(
@@ -100,6 +109,8 @@ Future<void> main() async {
       activityBloc: activityBloc,
       merchantBloc: merchantBloc,
       adminMerchantBloc: adminMerchantBloc,
+      donationBloc: donationBloc,
+      adminCampaignBloc: adminCampaignBloc,
       connectivity: connectivity,
     ),
   );
@@ -118,6 +129,8 @@ class MyApp extends StatelessWidget {
     required this.activityBloc,
     required this.merchantBloc,
     required this.adminMerchantBloc,
+    required this.donationBloc,
+    required this.adminCampaignBloc,
     required this.connectivity,
   });
 
@@ -131,6 +144,8 @@ class MyApp extends StatelessWidget {
   final ActivityBloc activityBloc;
   final MerchantBloc merchantBloc;
   final AdminMerchantBloc adminMerchantBloc;
+  final DonationBloc donationBloc;
+  final AdminCampaignBloc adminCampaignBloc;
   final ConnectivityService connectivity;
 
   @override
@@ -147,6 +162,8 @@ class MyApp extends StatelessWidget {
         BlocProvider.value(value: activityBloc),
         BlocProvider.value(value: merchantBloc),
         BlocProvider.value(value: adminMerchantBloc),
+        BlocProvider.value(value: donationBloc),
+        BlocProvider.value(value: adminCampaignBloc),
       ],
       child: MaterialApp(
         title: 'KarbonKita',
