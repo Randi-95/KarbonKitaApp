@@ -5,8 +5,8 @@ import '../../bloc/mission/mission_bloc.dart';
 import '../../bloc/mission/mission_event.dart';
 import '../../bloc/mission/mission_state.dart';
 import '../../models/mission.dart';
-import 'misi_scan_screen.dart';
-import 'mobility_tracker_screen.dart';
+import '../widgets/mission/mission_action.dart';
+import 'mission_detail_screen.dart';
 
 class MisiScreen extends StatelessWidget {
   const MisiScreen({super.key});
@@ -379,320 +379,168 @@ class MisiScreen extends StatelessWidget {
     );
   }
 
+  void _openDetail(Mission mission, BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => MissionDetailScreen(mission: mission)),
+    );
+  }
+
   Widget _buildMissionCard(Mission mission, BuildContext context) {
-    // Kunci harian 1x per misi — kartu selesai hari ini dikunci total.
+    // Kunci harian 1x per misi — kartu selesai hari ini tetap bisa
+    // di-tap untuk baca langkah (read-only di detail).
     if (mission.isCompletedToday) {
-      return _buildCompletedCard(mission);
+      return _buildCompletedCard(mission, context);
     }
 
-    // Determine button action based on category
-    VoidCallback? onPressed;
-    String buttonText;
-    Color buttonColor = mission.categoryColor;
+    final buttonText = missionCtaLabel(mission);
+    final buttonColor = mission.categoryColor;
+    final canStart =
+        mission.category == 'mobility' || mission.category == 'waste';
+    final VoidCallback? onPressed = canStart
+        ? () => startMission(context, mission)
+        : null;
 
-    if (mission.category == 'mobility') {
-      buttonText = 'Mulai Tracker';
-      onPressed = () async {
-        final bloc = context.read<MissionBloc>();
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MobilityTrackerScreen(
-              missionTitle: mission.title,
-              activityType: _getActivityTypeFromTitle(mission.title),
-              missionId: mission.id,
-              targetDistanceKm: mission.targetDistanceKm ?? 0.1,
+    return InkWell(
+      onTap: () => _openDetail(mission, context),
+      borderRadius: BorderRadius.circular(15),
+      splashColor: const Color(0xFF1B8039).withValues(alpha: 0.12),
+      highlightColor: const Color(0xFF1B8039).withValues(alpha: 0.06),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
             ),
-          ),
-        );
-        // Refresh status harian agar kartu langsung terkunci.
-        bloc.add(const MissionsLoaded(force: true));
-        if (result is Map<String, dynamic> && context.mounted) {
-          final xp = result['xp_earned']?.toString() ?? '0';
-          final points = result['points_earned']?.toString() ?? '0';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Misi selesai! +$xp XP, +$points poin.'),
-              backgroundColor: const Color(0xFF1B8039),
-            ),
-          );
-        }
-      };
-    } else if (mission.category == 'waste') {
-      buttonText = 'Upload Foto';
-      onPressed = () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MisiScanScreen(
-              missionTitle: mission.title,
-              missionId: mission.id,
-            ),
-          ),
-        );
-      };
-    } else {
-      buttonText = 'Mulai';
-      onPressed = null;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Left Icon
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: mission.iconBgColor,
-                  shape: BoxShape.circle,
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left Icon
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: mission.iconBgColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    mission.categoryIcon,
+                    color: mission.categoryColor,
+                    size: 30,
+                  ),
                 ),
-                child: Icon(
-                  mission.categoryIcon,
-                  color: mission.categoryColor,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Middle Content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: mission.categoryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                mission.categoryIcon,
-                                color: mission.categoryColor,
-                                size: 12,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                mission.categoryLabel,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: mission.categoryColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (mission.category == 'mobility' &&
-                            mission.targetDistanceKm != null) ...[
-                          const SizedBox(width: 6),
+                const SizedBox(width: 12),
+                // Middle Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE3F2FD),
+                              color: mission.categoryColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
-                                  Icons.flag,
-                                  color: Color(0xFF1565C0),
+                                Icon(
+                                  mission.categoryIcon,
+                                  color: mission.categoryColor,
                                   size: 12,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Target ${mission.targetDistanceKm!.toStringAsFixed(1)} KM',
-                                  style: const TextStyle(
+                                  mission.categoryLabel,
+                                  style: TextStyle(
                                     fontSize: 10,
-                                    color: Color(0xFF1565C0),
+                                    color: mission.categoryColor,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ],
                             ),
                           ),
+                          if (mission.category == 'mobility' &&
+                              mission.targetDistanceKm != null) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE3F2FD),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.flag,
+                                    color: Color(0xFF1565C0),
+                                    size: 12,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Target ${mission.targetDistanceKm!.toStringAsFixed(1)} KM',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Color(0xFF1565C0),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      mission.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                        height: 1.2,
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      mission.description,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.black54,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Points & Button Row (below the main content)
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F8E9),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/images/ecopoints.png',
-                      width: 20,
-                      height: 20,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.eco, color: Colors.green, size: 20),
-                    ),
-                    const SizedBox(width: 4),
-                    Column(
-                      children: [
-                        Text(
-                          '+${mission.pointsReward}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              mission.title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                                height: 1.2,
+                              ),
+                            ),
                           ),
-                        ),
-                        const Text('Poin', style: TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              SizedBox(
-                height: 36,
-                child: ElevatedButton(
-                  onPressed: onPressed ?? () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: buttonColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    buttonText,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Kartu misi yang sudah verified hari ini — terkunci sampai besok.
-  Widget _buildCompletedCard(Mission mission) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F8E9),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFF1B8039), width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1B8039),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.check, color: Colors.white, size: 30),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  mission.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B8039),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.lock, color: Colors.white, size: 12),
-                      SizedBox(width: 4),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.chevron_right,
+                            color: Colors.grey[400],
+                            size: 22,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       Text(
-                        'Selesai hari ini • Reset besok',
-                        style: TextStyle(
+                        mission.description,
+                        style: const TextStyle(
                           fontSize: 10,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                          color: Colors.black54,
                         ),
                       ),
                     ],
@@ -700,19 +548,169 @@ class MisiScreen extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            // Points & Button Row (below the main content)
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F8E9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/images/ecopoints.png',
+                        width: 20,
+                        height: 20,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                              Icons.eco,
+                              color: Colors.green,
+                              size: 20,
+                            ),
+                      ),
+                      const SizedBox(width: 4),
+                      Column(
+                        children: [
+                          Text(
+                            '+${mission.pointsReward}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Text('Poin', style: TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                SizedBox(
+                  height: 36,
+                  child: ElevatedButton(
+                    onPressed: onPressed ?? () {},
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: buttonColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      buttonText,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  String _getActivityTypeFromTitle(String title) {
-    final lower = title.toLowerCase();
-    if (lower.contains('sepeda') ||
-        lower.contains('cycling') ||
-        lower.contains('pedal')) {
-      return 'cycling';
-    }
-    return 'walking';
+  /// Kartu misi yang sudah verified hari ini — terkunci sampai besok.
+  /// Tetap bisa di-tap untuk membaca langkah di detail (read-only).
+  Widget _buildCompletedCard(Mission mission, BuildContext context) {
+    return InkWell(
+      onTap: () => _openDetail(mission, context),
+      borderRadius: BorderRadius.circular(15),
+      splashColor: const Color(0xFF1B8039).withValues(alpha: 0.12),
+      highlightColor: const Color(0xFF1B8039).withValues(alpha: 0.06),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F8E9),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: const Color(0xFF1B8039), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: const BoxDecoration(
+                color: Color(0xFF1B8039),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check, color: Colors.white, size: 30),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          mission.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.chevron_right,
+                        color: Color(0xFF1B8039),
+                        size: 22,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B8039),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock, color: Colors.white, size: 12),
+                        SizedBox(width: 4),
+                        Text(
+                          'Selesai hari ini • Reset besok',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
