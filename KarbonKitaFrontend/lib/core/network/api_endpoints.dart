@@ -58,6 +58,21 @@ class ApiEndpoints {
   // Body: {unique_code: qr_token}. Token asli backend format KBK-XXX-XXX.
   static const String vouchersRedeem = '/vouchers/redeem';
 
+  // Donasi warga — katalog publik, donasi & riwayat butuh login.
+  static const String donationCampaigns = '/donation-campaigns';
+  static const String donations = '/donations';
+  static const String myDonations = '/user/my-donations';
+
+  static String donationCampaignDetail(String slug) =>
+      '$donationCampaigns/$slug';
+  static String donationCancel(int id) => '$donations/$id/cancel';
+
+  // Admin donasi & pendanaan (role:admin).
+  static const String adminDonationCampaigns = '/admin/donation-campaigns';
+  static const String adminVouchers = '/admin/vouchers';
+
+  static String adminDonationCampaign(int id) => '$adminDonationCampaigns/$id';
+
   // Admin validasi mitra (role:admin).
   static const String adminMerchants = '/admin/merchants';
 

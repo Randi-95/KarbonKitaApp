@@ -10,6 +10,7 @@ import '../../models/dashboard.dart';
 import '../../models/mission.dart';
 import 'misi_screen.dart';
 import 'marketplace_screen.dart';
+import 'donation_screen.dart';
 import 'leaderboard_screen.dart';
 import 'profile_screen.dart';
 import 'quiz_level_screen.dart';
@@ -826,6 +827,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 10),
               Expanded(child: _buildAksiButton(Icons.quiz, 'Kuis Harian')),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildAksiButton(
+                  Icons.volunteer_activism,
+                  'Donasi',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DonationScreen()),
+                    );
+                  },
+                ),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 flex: 2,

@@ -47,6 +47,13 @@ return [
         'base_url' => env('XENDIT_BASE_URL', 'https://api.xendit.co'),
         'mock' => env('XENDIT_MOCK', false),
         'timeout' => env('XENDIT_TIMEOUT', 20),
+        // Namespace untuk reference_id & idempotency key payout.
+        // WAJIB beda per environment yang berbagi satu API key Xendit
+        // (mis. lokal vs VPS, atau antar percobaan dengan data seed yang
+        // id-nya identik). Key Xendit yang sama + id claim yang sama +
+        // body berbeda = 409 DUPLICATE_ERROR permanen. Kosong = format lama
+        // 'KBK-CLAIM-{id}' (kompatibel mundur, dipakai test).
+        'key_prefix' => env('XENDIT_KEY_PREFIX', ''),
         'callback_token' => env('XENDIT_CALLBACK_TOKEN'),
         'invoice_duration' => env('XENDIT_INVOICE_DURATION', 86400),
         'success_redirect_url' => env('XENDIT_SUCCESS_REDIRECT_URL'),

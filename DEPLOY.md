@@ -73,6 +73,9 @@ Wajib diisi:
 * `WEB_PORT=8080` (atau port lain hasil cek langkah 0)
 * `DB_PASSWORD` & `MYSQL_ROOT_PASSWORD` (kuat, berbeda)
 * `XENDIT_API_KEY` + `XENDIT_CALLBACK_TOKEN` (mode **live**)
+* `XENDIT_KEY_PREFIX=PROD` — **wajib unik per environment** yang berbagi
+  satu API key (lokal pakai `LOCAL`, VPS pakai `PROD`). Tanpa ini, claim id
+  yang sama di dua tempat = 409 DUPLICATE_ERROR permanen dari Xendit.
 
 Generate `APP_KEY` (di VPS, tanpa PHP host):
 ```bash
