@@ -48,11 +48,11 @@ return [
         'mock' => env('XENDIT_MOCK', false),
         'timeout' => env('XENDIT_TIMEOUT', 20),
         // Namespace untuk reference_id & idempotency key payout.
-        // WAJIB beda per environment yang berbagi satu API key Xendit
-        // (mis. lokal vs VPS, atau antar percobaan dengan data seed yang
-        // id-nya identik). Key Xendit yang sama + id claim yang sama +
-        // body berbeda = 409 DUPLICATE_ERROR permanen. Kosong = format lama
-        // 'KBK-CLAIM-{id}' (kompatibel mundur, dipakai test).
+        // Opsional: bila kosong, diturunkan otomatis dari APP_ENV
+        // (production→PROD, local→LOCAL; testing→tanpa prefix).
+        // Isi manual hanya bila dua environment SAMA (mis. dua VPS
+        // production) berbagi satu API key. Tanpa namespace yang beda,
+        // claim id yang sama di dua tempat = 409 DUPLICATE_ERROR permanen.
         'key_prefix' => env('XENDIT_KEY_PREFIX', ''),
         'callback_token' => env('XENDIT_CALLBACK_TOKEN'),
         'invoice_duration' => env('XENDIT_INVOICE_DURATION', 86400),

@@ -74,11 +74,33 @@ class XenditService
     /**
      * Prefix namespace, dinormalisasi ke [A-Z0-9-] agar aman untuk
      * reference_id & idempotency key Xendit.
+     *
+     * Prioritas: XENDIT_KEY_PREFIX eksplisit dulu; bila kosong, turunkan
+     * otomatis dari APP_ENV (production→PROD, local→LOCAL, env lain→
+     * uppercase-nya) sehingga tidak perlu konfigurasi per environment.
+     * Environment testing sengaja tanpa prefix (format lawas) agar test
+     * deterministik. Override manual tetap tersedia untuk kasus khusus
+     * (mis. dua VPS production berbagi satu API key).
      */
     public function keyPrefix(): string
     {
-        $prefix = strtoupper(trim((string) config('services.xendit.key_prefix', '')));
-        $prefix = preg_replace('/[^A-Z0-9-]/', '', $prefix) ?? '';
+        $explicit = strtoupper(trim((string) config('services.xendit.key_prefix', '')));
+
+        if ($explicit === '') {
+            $env = strtolower((string) config('app.env', ''));
+
+            if ($env === '' || $env === 'testing') {
+                return '';
+            }
+
+            $explicit = match ($env) {
+                'production' => 'PROD',
+                'local' => 'LOCAL',
+                default => strtoupper($env),
+            };
+        }
+
+        $prefix = preg_replace('/[^A-Z0-9-]/', '', $explicit) ?? '';
 
         return trim($prefix, '-');
     }
