@@ -9,7 +9,7 @@ import '../../bloc/register_region/register_region_cubit.dart';
 import '../../core/utils/address_normalize.dart';
 import '../../data/datasources/region_remote_datasource.dart';
 import '../../data/repositories/region_repository.dart';
-import '../../models/region.dart';
+import '../widgets/region_cascading_dropdowns.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -323,174 +323,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 24),
 
                       // Location Section
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on_outlined,
-                            size: 20,
-                            color: Colors.black87,
-                          ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Lokasi Kamu',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          BlocBuilder<RegisterRegionCubit, RegisterRegionState>(
-                            bloc: _regionCubit,
-                            builder: (context, state) {
-                              final loading = state.loadingLevel != null;
-                              return IconButton(
-                                tooltip: 'Muat ulang daftar wilayah',
-                                onPressed: loading ? null : _regionCubit.retry,
-                                icon: loading
-                                    ? const SizedBox(
-                                        height: 16,
-                                        width: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.refresh,
-                                        size: 20,
-                                        color: Color(0xFF1B8039),
-                                      ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Pilih dari daftar agar datamu konsisten (default: Surabaya)',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 12),
-                      BlocBuilder<RegisterRegionCubit, RegisterRegionState>(
-                        bloc: _regionCubit,
-                        builder: (context, state) {
-                          return Column(
-                            children: [
-                              if (state.isOffline) ...[
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF8E1),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.amber.shade300,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.wifi_off,
-                                        size: 16,
-                                        color: Colors.amber.shade800,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Mode offline: daftar wilayah terbatas. '
-                                              'Sambungkan internet lalu ketuk ikon muat ulang di atas.',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.amber.shade900,
-                                              ),
-                                            ),
-                                            if (state.offlineReason !=
-                                                null) ...[
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                'Detail: ${state.offlineReason}',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey[700],
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-                              _buildRegionDropdown(
-                                hint: 'Provinsi',
-                                icon: Icons.map_outlined,
-                                value: state.province,
-                                items: state.provinces,
-                                loading:
-                                    state.loadingLevel == RegionLevel.province,
-                                onChanged: (v) =>
-                                    _regionCubit.selectProvince(v),
-                              ),
-                              const SizedBox(height: 12),
-                              _buildRegionDropdown(
-                                hint: 'Kota / Kabupaten',
-                                icon: Icons.location_city,
-                                value: state.regency,
-                                items: state.regencies,
-                                loading:
-                                    state.loadingLevel == RegionLevel.regency,
-                                onChanged: (v) => _regionCubit.selectRegency(v),
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildRegionDropdown(
-                                      hint: 'Kecamatan',
-                                      icon: Icons.share_location,
-                                      value: state.district,
-                                      items: state.districts,
-                                      loading:
-                                          state.loadingLevel ==
-                                          RegionLevel.district,
-                                      onChanged: (v) =>
-                                          _regionCubit.selectDistrict(v),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildRegionDropdown(
-                                      hint: 'Kelurahan',
-                                      icon: Icons.home_work_outlined,
-                                      value: state.village,
-                                      items: state.villages,
-                                      loading:
-                                          state.loadingLevel ==
-                                          RegionLevel.village,
-                                      onChanged: (v) =>
-                                          _regionCubit.selectVillage(v),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (state.error != null) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  state.error!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          );
-                        },
+                      RegionCascadingDropdowns(
+                        cubit: _regionCubit,
+                        helperText:
+                            'Pilih dari daftar agar datamu konsisten (default: Surabaya)',
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -752,68 +588,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildRegionDropdown({
-    required String hint,
-    required IconData icon,
-    required Region? value,
-    required List<Region> items,
-    required bool loading,
-    required ValueChanged<Region?> onChanged,
-  }) {
-    final enabled = !loading && items.isNotEmpty;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: enabled ? Colors.white : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<Region>(
-          isExpanded: true,
-          value: value,
-          icon: loading
-              ? const SizedBox(
-                  height: 16,
-                  width: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Colors.grey.shade600,
-                  size: 16,
-                ),
-          hint: Row(
-            children: [
-              Icon(icon, color: Colors.green, size: 16),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  loading ? 'Memuat...' : hint,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          items: items
-              .map(
-                (r) => DropdownMenuItem<Region>(
-                  value: r,
-                  child: Text(
-                    r.name,
-                    style: const TextStyle(fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: enabled ? onChanged : null,
-        ),
       ),
     );
   }

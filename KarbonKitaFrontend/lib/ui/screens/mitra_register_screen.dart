@@ -8,7 +8,12 @@ import 'package:image_picker/image_picker.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
 import '../../bloc/auth/auth_state.dart';
+import '../../bloc/register_region/register_region_cubit.dart';
 import '../../core/storage/pick_copy.dart';
+import '../../core/utils/address_normalize.dart';
+import '../../data/datasources/region_remote_datasource.dart';
+import '../../data/repositories/region_repository.dart';
+import '../widgets/region_cascading_dropdowns.dart';
 import '../widgets/validation_error_sheet.dart';
 
 /// Form pendaftaran Mitra UMKM: `POST /api/auth/register-mitra`.
@@ -31,19 +36,12 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
   final _phone = TextEditingController();
   final _password = TextEditingController();
   final _passwordConfirm = TextEditingController();
-  final _city = TextEditingController();
-  final _district = TextEditingController();
-  final _subDistrict = TextEditingController();
   final _rt = TextEditingController();
   final _rw = TextEditingController();
 
   final _namaUsaha = TextEditingController();
   final _jenisUsaha = TextEditingController();
   final _alamatUsaha = TextEditingController();
-  final _usahaKelurahan = TextEditingController();
-  final _usahaKecamatan = TextEditingController();
-  final _usahaKota = TextEditingController();
-  final _usahaProvinsi = TextEditingController();
   final _usahaKodePos = TextEditingController();
 
   final _nomorKtp = TextEditingController();
@@ -63,11 +61,22 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
   XFile? _fotoToko2;
   XFile? _fotoToko3;
 
+  /// Dropdown wilayah.id — dua instance independen agar domisili owner dan
+  /// alamat usaha bisa beda kota tanpa saling menimpa.
+  late final RegisterRegionCubit _domisiliCubit;
+  late final RegisterRegionCubit _usahaCubit;
+
   @override
   void initState() {
     super.initState();
     // Bersihkan sisa salinan sesi sebelumnya (best-effort).
     unawaited(clearStalePersistedPhotos());
+    _domisiliCubit = RegisterRegionCubit(
+      RegionRepository(RegionRemoteDatasource()),
+    )..loadProvinces();
+    _usahaCubit = RegisterRegionCubit(
+      RegionRepository(RegionRemoteDatasource()),
+    )..loadProvinces();
   }
 
   @override
@@ -78,18 +87,11 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
       _phone,
       _password,
       _passwordConfirm,
-      _city,
-      _district,
-      _subDistrict,
       _rt,
       _rw,
       _namaUsaha,
       _jenisUsaha,
       _alamatUsaha,
-      _usahaKelurahan,
-      _usahaKecamatan,
-      _usahaKota,
-      _usahaProvinsi,
       _usahaKodePos,
       _nomorKtp,
       _nomorNib,
@@ -99,6 +101,8 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
     ]) {
       c.dispose();
     }
+    _domisiliCubit.close();
+    _usahaCubit.close();
     super.dispose();
   }
 
@@ -207,8 +211,16 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
     return null;
   }
 
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   /// Isi seluruh field teks dengan data valid + unik (dev only).
   /// Foto tetap dipilih manual karena harus file gambar asli.
+  /// Dropdown wilayah dibiarkan auto-preselect rantai Surabaya oleh cubit.
   void _seedForm() {
     final stamp = DateTime.now().millisecondsSinceEpoch.toString();
     final short = stamp.substring(stamp.length - 6);
@@ -220,18 +232,11 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
       _phone.text = '+628${stamp.substring(stamp.length - 10)}';
       _password.text = 'Password123';
       _passwordConfirm.text = 'Password123';
-      _city.text = 'Surabaya';
-      _district.text = 'Gubeng';
-      _subDistrict.text = 'Mojo';
       _rt.text = '005';
       _rw.text = '02';
       _namaUsaha.text = 'Warung Seed $short';
       _jenisUsaha.text = 'Kelontong';
       _alamatUsaha.text = 'Jl. Seed No. $short, Surabaya';
-      _usahaKelurahan.text = 'Mojo';
-      _usahaKecamatan.text = 'Gubeng';
-      _usahaKota.text = 'Surabaya';
-      _usahaProvinsi.text = 'Jawa Timur';
       _usahaKodePos.text = '60111';
       _nomorKtp.text = '3578$digits12';
       _nomorNib.text = 'NIB$stamp';
@@ -278,6 +283,10 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
 
   void _submit() async {
     // Validasi ringan client-side; validasi penuh tetap di backend.
+    // Alamat domisili + usaha wajib dipilih via dropdown wilayah.id
+    // (sama seperti register pengguna), bukan ketik bebas.
+    final domisili = _domisiliCubit.state;
+    final usaha = _usahaCubit.state;
     final checks = <String?>[
       _required(_name.text, 'Nama'),
       _required(_email.text, 'Email'),
@@ -286,7 +295,6 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
       _required(_namaUsaha.text, 'Nama usaha'),
       _required(_jenisUsaha.text, 'Jenis usaha'),
       _required(_alamatUsaha.text, 'Alamat usaha'),
-      _required(_city.text, 'Kota domisili'),
       _required(_nomorKtp.text, 'Nomor KTP'),
       _required(_nomorNib.text, 'Nomor NIB'),
       _required(_namaBank.text, 'Nama bank'),
@@ -295,33 +303,41 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
     ];
     final firstError = checks.whereType<String>().firstOrNull;
     if (firstError != null) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(firstError)));
+      _showSnack(firstError);
       return;
     }
-    if (!_email.text.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Format email tidak valid.')),
+    if (!domisili.isComplete) {
+      _showSnack('Lengkapi domisili: provinsi, kota, kecamatan, kelurahan.');
+      return;
+    }
+    if (!isValidRt(_rt.text)) {
+      _showSnack('RT domisili tidak valid (1-3 digit angka).');
+      return;
+    }
+    if (!isValidRw(_rw.text)) {
+      _showSnack('RW domisili tidak valid (1-2 digit angka).');
+      return;
+    }
+    if (!usaha.isComplete) {
+      _showSnack(
+        'Lengkapi alamat usaha: provinsi, kota, kecamatan, kelurahan.',
       );
+      return;
+    }
+    if (!isValidEmail(_email.text.trim())) {
+      _showSnack('Format email tidak valid.');
       return;
     }
     if (_password.text.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kata sandi minimal 8 karakter.')),
-      );
+      _showSnack('Kata sandi minimal 8 karakter.');
       return;
     }
     if (_password.text != _passwordConfirm.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Konfirmasi kata sandi tidak cocok.')),
-      );
+      _showSnack('Konfirmasi kata sandi tidak cocok.');
       return;
     }
     if (!RegExp(r'^[0-9]{16}$').hasMatch(_nomorKtp.text.trim())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nomor KTP harus 16 digit angka.')),
-      );
+      _showSnack('Nomor KTP harus 16 digit angka.');
       return;
     }
     if (_fotoKtp == null || _fotoNib == null || _fotoToko == null) {
@@ -390,18 +406,18 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
           'phone': _phone.text.trim(),
           'password': _password.text,
           'password_confirmation': _passwordConfirm.text,
-          'city': _city.text.trim(),
-          'district': _district.text.trim(),
-          'sub_district': _subDistrict.text.trim(),
-          'rt': _rt.text.trim(),
-          'rw': _rw.text.trim(),
+          'city': canonicalName(domisili.regency!.name),
+          'district': canonicalName(domisili.district!.name),
+          'sub_district': canonicalName(domisili.village!.name),
+          'rt': normalizeRt(_rt.text),
+          'rw': normalizeRw(_rw.text),
           'nama_usaha': _namaUsaha.text.trim(),
           'jenis_usaha': _jenisUsaha.text.trim(),
           'alamat_usaha': _alamatUsaha.text.trim(),
-          'usaha_kelurahan': _usahaKelurahan.text.trim(),
-          'usaha_kecamatan': _usahaKecamatan.text.trim(),
-          'usaha_kota': _usahaKota.text.trim(),
-          'usaha_provinsi': _usahaProvinsi.text.trim(),
+          'usaha_kelurahan': canonicalName(usaha.village!.name),
+          'usaha_kecamatan': canonicalName(usaha.district!.name),
+          'usaha_kota': canonicalName(usaha.regency!.name),
+          'usaha_provinsi': canonicalName(usaha.province!.name),
           'usaha_kode_pos': _usahaKodePos.text.trim(),
           'nomor_ktp': _nomorKtp.text.trim(),
           'nomor_nib': _nomorNib.text.trim(),
@@ -525,38 +541,41 @@ class _MitraRegisterScreenState extends State<MitraRegisterScreen> {
                     ),
                     Row(
                       children: [
-                        Expanded(child: _field(_city, 'Kota')),
+                        Expanded(
+                          child: _field(
+                            _rt,
+                            'RT (cth: 005)',
+                            keyboard: TextInputType.number,
+                          ),
+                        ),
                         const SizedBox(width: 10),
-                        Expanded(child: _field(_district, 'Kecamatan')),
+                        Expanded(
+                          child: _field(
+                            _rw,
+                            'RW (cth: 02)',
+                            keyboard: TextInputType.number,
+                          ),
+                        ),
                       ],
                     ),
-                    Row(
-                      children: [
-                        Expanded(child: _field(_subDistrict, 'Kelurahan')),
-                        const SizedBox(width: 10),
-                        Expanded(child: _field(_rt, 'RT')),
-                        const SizedBox(width: 10),
-                        Expanded(child: _field(_rw, 'RW')),
-                      ],
+                    RegionCascadingDropdowns(
+                      cubit: _domisiliCubit,
+                      helperText:
+                          'Domisili owner',
                     ),
                   ]),
                   _section('Data Toko', [
                     _field(_namaUsaha, 'Nama usaha'),
                     _field(_jenisUsaha, 'Jenis usaha (cth. Kedai Kopi)'),
-                    _field(_alamatUsaha, 'Alamat usaha', maxLines: 2),
-                    Row(
-                      children: [
-                        Expanded(child: _field(_usahaKelurahan, 'Kel. usaha')),
-                        const SizedBox(width: 10),
-                        Expanded(child: _field(_usahaKecamatan, 'Kec. usaha')),
-                      ],
+                    _field(
+                      _alamatUsaha,
+                      'Jalan / alamat usaha (cth. Jl. Gubeng No. 10)',
+                      maxLines: 2,
                     ),
-                    Row(
-                      children: [
-                        Expanded(child: _field(_usahaKota, 'Kota usaha')),
-                        const SizedBox(width: 10),
-                        Expanded(child: _field(_usahaProvinsi, 'Provinsi')),
-                      ],
+                    RegionCascadingDropdowns(
+                      cubit: _usahaCubit,
+                      helperText:
+                          'Lokasi usaha',
                     ),
                     _field(
                       _usahaKodePos,

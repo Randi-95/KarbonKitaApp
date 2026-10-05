@@ -6,8 +6,6 @@ import '../../bloc/auth/auth_event.dart';
 import '../../bloc/auth/auth_state.dart';
 import 'register_screen.dart';
 import 'mitra_register_screen.dart';
-import 'merchant_dashboard_screen.dart';
-import 'admin_validation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -290,30 +288,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-
-                      // Forgot Password (token permanen sampai logout,
-                      // jadi tidak ada lagi checkbox "Ingat saya")
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            minimumSize: Size.zero,
-                            padding: EdgeInsets.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          onPressed: () {
-                            // Lupa kata sandi action
-                          },
-                          child: const Text(
-                            'Lupa kata sandi?',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF1B8039),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
                       const SizedBox(height: 32),
 
                       // Submit Button
@@ -354,80 +328,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 20),
                       Divider(color: Colors.grey.shade200, thickness: 1),
                       const SizedBox(height: 12),
-                      Center(
-                        child: Text(
-                          'Demo Akses Cepat (UI Only)',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF8A938F),
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const MerchantDashboardScreen(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.storefront, size: 16),
-                              label: const Text(
-                                'Mitra',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Color(0xFF1B8039),
-                                side: BorderSide(color: Color(0xFF1B8039)),
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                shape: StadiumBorder(),
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const AdminValidationScreen(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(
-                                Icons.admin_panel_settings,
-                                size: 16,
-                              ),
-                              label: const Text(
-                                'Validasi',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Color(0xFF1E6C46),
-                                side: BorderSide(color: Color(0xFF1E6C46)),
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                shape: StadiumBorder(),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
