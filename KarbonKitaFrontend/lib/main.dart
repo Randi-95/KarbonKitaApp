@@ -39,6 +39,8 @@ import 'ui/screens/admin_validation_screen.dart';
 import 'ui/screens/home_screen.dart';
 import 'ui/screens/login_screen.dart';
 import 'ui/screens/merchant_dashboard_screen.dart';
+import 'ui/screens/onboarding_screen.dart';
+import 'core/storage/onboarding_storage.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -178,7 +180,8 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Auto-login: token permanen → langsung Home, tanpa token → Login.
+/// Auto-login: token permanen → langsung Home, tanpa token → Onboarding
+/// (sekali saja) → Login.
 /// Offline: profil lokal tetap dianggap sesi agar cache offline tampil.
 class _SessionGate extends StatelessWidget {
   const _SessionGate();
@@ -200,8 +203,29 @@ class _SessionGate extends StatelessWidget {
             if (role == 'admin') return const AdminValidationScreen();
             return const HomeScreen();
           case AuthStatus.unauthenticated:
-            return const LoginScreen();
+            return const _OnboardingGate();
         }
+      },
+    );
+  }
+}
+
+/// Menampilkan onboarding sekali saja sebelum login.
+class _OnboardingGate extends StatelessWidget {
+  const _OnboardingGate();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: OnboardingStorage().hasSeenOnboarding(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.data == true) return const LoginScreen();
+        return const OnboardingScreen();
       },
     );
   }
