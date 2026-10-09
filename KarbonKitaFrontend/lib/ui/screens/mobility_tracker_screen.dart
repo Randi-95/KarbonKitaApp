@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../bloc/mission/mission_bloc.dart';
 import '../../bloc/mission/mission_event.dart';
@@ -39,7 +42,8 @@ class MobilityTrackerScreen extends StatefulWidget {
   State<MobilityTrackerScreen> createState() => _MobilityTrackerScreenState();
 }
 
-class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
+class _MobilityTrackerScreenState extends State<MobilityTrackerScreen>
+    with WidgetsBindingObserver {
   static const _fallbackCenter = LatLng(-7.28, 112.79);
 
   /// Batas akurasi GPS (meter). Fix dengan akurasi lebih buruk dibuang.
@@ -97,20 +101,36 @@ class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
   bool _startLocked = false;
   final List<LatLng> _warmupFixes = [];
 
+  /// true bila izin background (Always) granted — layar boleh dimatikan.
+  /// false = mode foreground-only, user wajib menjaga layar menyala.
+  bool _backgroundReady = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     activityType = widget.activityType == 'walking' ? 'walking' : 'cycling';
     _initTracking();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Matikan wake lock karena tracking selesai/dibuang.
+    WakelockPlus.disable();
     _timer?.cancel();
     _simTimer?.cancel();
     _positionSub?.cancel();
     _mapController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Sengaja TIDAK pause stream/timer di sini: tracking harus tetap jalan
+    // saat layar mati (locked) maupun app di-minimize. Stream dilindungi
+    // foreground service (Android) / background location mode (iOS).
+    // Kasus yang memang tidak didukung: app di-swipe kill & HP mati total.
   }
 
   Future<void> _initTracking() async {
@@ -133,11 +153,30 @@ class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
       return;
     }
 
+    // Izin background agar tracking tetap jalan saat layar mati / minimize.
+    // Tanpa ini stream berhenti begitu activity tak terlihat → rute beku
+    // di titik awal (bug yang terjadi saat testing pakai motor kemarin).
+    _backgroundReady = await _ensureBackgroundPermissions();
+    if (!mounted) return;
+
+    // Tahan CPU tetap bangun selama tracking (pendamping wake lock milik
+    // foreground service geolocator di Android).
+    await WakelockPlus.enable();
+
     if (mounted) {
       setState(() {
         _currentPosition = _fallbackCenter;
         _isInitializing = false;
       });
+    }
+    if (!mounted) return;
+    if (_backgroundReady) {
+      _snack('Background aktif — boleh kunci layar, jangan tutup aplikasi.');
+    } else {
+      _snack(
+        'Izin background ditolak: tracking hanya jalan saat layar menyala. '
+        'Jangan kunci layar ya.',
+      );
     }
     _startStream();
 
@@ -152,6 +191,67 @@ class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
     } catch (_) {
       // Abaikan — stream yang akan mengunci start saat GPS sudah bagus.
     }
+  }
+
+  /// Meminta izin penunjang background tracking.
+  ///
+  /// Return true bila mode background penuh siap (layar boleh dimatikan).
+  /// - Android 10+: butuh `locationAlways` di samping foreground.
+  /// - Android 11+: `locationAlways` hanya bisa granted via Settings, maka
+  ///   user diarahkan lewat dialog; bila menolak, tracking tetap lanjut
+  ///   mode foreground-only (wajib layar menyala).
+  /// - Android 13+: butuh `notification` agar notifikasi foreground service
+  ///   tampil (tanpa ini service bisa dibunuh sistem).
+  Future<bool> _ensureBackgroundPermissions() async {
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+
+    if (isAndroid) {
+      // Hasil diabaikan: opsional, hanya agar notifikasi foreground tampil.
+      await Permission.notification.request();
+    }
+
+    var whenInUse = await Permission.locationWhenInUse.status;
+    if (whenInUse.isDenied) {
+      whenInUse = await Permission.locationWhenInUse.request();
+    }
+    if (!whenInUse.isGranted && !whenInUse.isLimited) {
+      return false;
+    }
+
+    var always = await Permission.locationAlways.status;
+    if (always.isGranted) return true;
+    if (always.isDenied) {
+      always = await Permission.locationAlways.request();
+      if (always.isGranted) return true;
+    }
+    if (!mounted) return false;
+    final openSettings = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aktifkan tracking background?'),
+        content: const Text(
+          'Agar rute tetap direkam saat layar dikunci, pilih '
+          '"Allow all the time / Izinkan selalu" di pengaturan. '
+          'Kalau dilewati, tracking hanya jalan saat layar menyala.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Lewati'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Buka Pengaturan'),
+          ),
+        ],
+      ),
+    );
+    if (openSettings == true) {
+      await openAppSettings();
+      always = await Permission.locationAlways.status;
+      return always.isGranted;
+    }
+    return false;
   }
 
   void _fail(String message) {
@@ -172,11 +272,42 @@ class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
 
   void _startStream() {
     _positionSub?.cancel();
-    _positionSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
+    // Foreground service (Android) + background updates (iOS) agar stream
+    // tetap hidup saat layar mati / app di-minimize. Tanpa
+    // foregroundNotificationConfig, OS menghentikan update begitu activity
+    // tidak terlihat → rute beku di titik awal.
+    final LocationSettings settings;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      settings = AndroidSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 5,
-      ),
+        intervalDuration: const Duration(seconds: 2),
+        foregroundNotificationConfig: ForegroundNotificationConfig(
+          notificationTitle: 'KarbonKita tracking berjalan',
+          notificationText:
+              'Rute misi direkam — boleh kunci layar, jangan tutup aplikasi.',
+          notificationChannelName: 'Tracking Misi',
+          enableWakeLock: true,
+          setOngoing: true,
+        ),
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      settings = AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+        activityType: ActivityType.fitness,
+        allowBackgroundLocationUpdates: true,
+        showBackgroundLocationIndicator: true,
+        pauseLocationUpdatesAutomatically: false,
+      );
+    } else {
+      settings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      );
+    }
+    _positionSub = Geolocator.getPositionStream(
+      locationSettings: settings,
     ).listen(_onPosition, onError: (_) {});
   }
 
@@ -401,6 +532,7 @@ class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
     setState(() => _isFinished = true);
     _timer?.cancel();
     _simTimer?.cancel();
+    WakelockPlus.disable();
     await _positionSub?.cancel();
     if (!mounted) return;
 
@@ -494,6 +626,7 @@ class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
   void _resumeAfterFailure() {
     if (!mounted) return;
     setState(() => _isFinished = false);
+    WakelockPlus.enable();
     if (_startLocked) _startTimer();
     if (_isSimulating) {
       _beginSimTicks();
@@ -617,6 +750,7 @@ class _MobilityTrackerScreenState extends State<MobilityTrackerScreen> {
                     isSyncing: isSyncing,
                     isWaitingGps: !_startLocked,
                     isSimulating: _isSimulating,
+                    showBackgroundHint: _backgroundReady,
                     onBack: _onBack,
                     onRecenter: _recenter,
                     onStartSimulation: _askStartSimulation,
@@ -653,6 +787,7 @@ class _TrackerView extends StatelessWidget {
     required this.isSyncing,
     this.isWaitingGps = false,
     this.isSimulating = false,
+    this.showBackgroundHint = false,
     required this.onBack,
     required this.onRecenter,
     required this.onStartSimulation,
@@ -675,6 +810,7 @@ class _TrackerView extends StatelessWidget {
   final bool isSyncing;
   final bool isWaitingGps;
   final bool isSimulating;
+  final bool showBackgroundHint;
   final VoidCallback onBack;
   final VoidCallback onRecenter;
   final VoidCallback onStartSimulation;
@@ -819,6 +955,32 @@ class _TrackerView extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Mencari sinyal GPS akurat… tetap di tempat.',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (showBackgroundHint)
+          Positioned(
+            left: 16,
+            right: 16,
+            top: MediaQuery.of(context).size.height * 0.12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B8039),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white, size: 16),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Background aktif — boleh kunci layar, jangan tutup aplikasi.',
                       style: TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ),
